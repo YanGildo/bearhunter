@@ -121,7 +121,7 @@ function Sources() {
       setTesting(`Falhou: ${(e as Error).message}`);
     }
   };
-  const row = (label: string, desc: string, v: boolean, k: 'discoverNew' | 'discoverMigrations' | 'discoverTrending') => (
+  const row = (label: string, desc: string, v: boolean, k: 'discoverNew' | 'discoverMigrations' | 'discoverTrending' | 'revivalGraveyard') => (
     <div className="flex items-center justify-between gap-4 border-b border-line py-2.5 last:border-0">
       <div>
         <div className="text-[12px] font-semibold">{label}</div>
@@ -145,6 +145,7 @@ function Sources() {
         <div className="label mb-1">Descoberta de tokens</div>
         {row('PumpPortal — tokens novos', 'Canal gratuito subscribeNewToken. Cada token novo da Pump.fun entra na lista e sai sozinho se não ganhar tração.', prefs.discoverNew, 'discoverNew')}
         {row('PumpPortal — migrações', 'Canal gratuito subscribeMigration. Tokens que saem da bonding curve para o PumpSwap.', prefs.discoverMigrations, 'discoverMigrations')}
+        {row('Cemitério do Revival', 'Tokens que saíram por falta de volume são reconferidos devagar (grátis, baixa prioridade). Se voltarem com volume real, entram de novo e o Revival avalia.', prefs.revivalGraveyard, 'revivalGraveyard')}
         {row('DexScreener — destaques', 'Boosts e perfis recentes da Solana, a cada 3 minutos (equivale ao Load Top Solana).', prefs.discoverTrending, 'discoverTrending')}
         <div className="flex items-center justify-between gap-4 pt-2.5">
           <div>

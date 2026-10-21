@@ -8,4 +8,5 @@ export const operatorHooks: {
   onObservation: ((t: TrackedToken, o: MarketObservation, hist: MarketObservation[]) => void) | null;
   isOperatorToken: ((mint: string) => boolean) | null;
   health: (() => SourceHealth | null) | null;
-} = { onCreated: null, onMigration: null, onObservation: null, isOperatorToken: null, health: null };
+  isEnabledForUser: (() => boolean) | null;
+} = { onCreated: null, onMigration: null, onObservation: null, isOperatorToken: null, health: null, isEnabledForUser: null };

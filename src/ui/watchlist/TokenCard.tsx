@@ -17,6 +17,8 @@ export const SOURCE_LABEL: Record<string, string> = {
   boosted: 'boosted',
   profile: 'dex_profile',
   search: 'search',
+  operator: 'operador',
+  graveyard: 'revival_cemiterio',
 };
 
 interface Props {

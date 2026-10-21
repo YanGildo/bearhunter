@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Alert, IndicatorConfig, IndicatorKey, MyAlert, PresetConfig, PresetKey, Timeframe, TrackedToken } from '@/domain/types';
 import type { OperatorState } from '@/operators/types';
 import { EMPTY_OPERATOR_STATE } from '@/operators/types';
-import { defaultIndicator, defaultPresets } from '@/domain/presets';
+import { defaultIndicator, defaultPresets, PRESETS_VERSION } from '@/domain/presets';
 import type { SourceHealth } from '@/adapters/types';
 import { DEXSCREENER_DEFAULT_BASE } from '@/adapters/dexscreener/client';
 
@@ -43,6 +43,8 @@ export interface Prefs {
   newTokenMinutes: number; // quanto tempo um token novo sem volume fica na lista
   debug: boolean;
   rpcUrl: string;
+  revivalGraveyard: boolean;
+  pumpPortalKey: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -65,6 +67,8 @@ export const DEFAULT_PREFS: Prefs = {
   newTokenMinutes: 10,
   debug: false,
   rpcUrl: 'https://api.mainnet-beta.solana.com',
+  revivalGraveyard: true,
+  pumpPortalKey: '',
 };
 
 interface State {
@@ -82,6 +86,8 @@ interface State {
   // persistido
   presets: Record<PresetKey, PresetConfig>;
   indicators: IndicatorConfig[];
+  presetsVersion: number;
+  graveyard: Record<string, number>; // tokens que saíram por falta de volume (para o Revival)
   operator: OperatorState;
   prefs: Prefs;
   favorites: string[];
@@ -115,7 +121,9 @@ export const useStore = create<State>()(
       newAlertIds: new Set(),
 
       presets: defaultPresets(),
-      indicators: [defaultIndicator()],
+      indicators: [{ ...defaultIndicator(), active: false }],
+      presetsVersion: PRESETS_VERSION,
+      graveyard: {},
       operator: EMPTY_OPERATOR_STATE,
       prefs: DEFAULT_PREFS,
       favorites: [],
@@ -154,6 +162,8 @@ export const useStore = create<State>()(
       partialize: (s) => ({
         presets: s.presets,
         indicators: s.indicators,
+        presetsVersion: s.presetsVersion,
+        graveyard: s.graveyard,
         operator: { ...s.operator, signals: s.operator.signals.slice(0, 300), unread: s.operator.unread },
         prefs: s.prefs,
         favorites: s.favorites,
@@ -173,11 +183,21 @@ export const useStore = create<State>()(
           const saved = p.presets?.[k];
           if (saved) presets[k] = { ...defaults[k], ...saved, tf: { ...defaults[k].tf, ...saved.tf } };
         }
+        let indicators = Array.isArray(p.indicators) ? p.indicators : current.indicators;
+        if ((p.presetsVersion ?? 1) < PRESETS_VERSION) {
+          // v2: Initial passa a usar os números do DRK; Strong/Explosive/Revival recalibrados; DRK desligado
+          for (const k of Object.keys(defaults) as PresetKey[]) {
+            const saved = p.presets?.[k];
+            presets[k] = { ...defaults[k], active: saved?.active ?? defaults[k].active, soundId: saved?.soundId ?? defaults[k].soundId, volume: saved?.volume ?? defaults[k].volume };
+          }
+          indicators = indicators.map((i) => (i.name === 'Indicadores DRK' ? { ...i, active: false } : i));
+        }
         return {
           ...current,
           ...p,
           presets,
-          indicators: Array.isArray(p.indicators) ? p.indicators : current.indicators,
+          presetsVersion: PRESETS_VERSION,
+          indicators,
           operator: { ...EMPTY_OPERATOR_STATE, ...(p.operator ?? {}), settings: { ...EMPTY_OPERATOR_STATE.settings, ...(p.operator?.settings ?? {}) } },
           prefs: { ...DEFAULT_PREFS, ...(p.prefs ?? {}) },
         };

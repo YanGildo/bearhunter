@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, Radar, Settings, Trophy, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, LogOut, Radar, Settings, Shield, Trophy, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { operatorsAllowed, useAuth } from '@/state/auth';
+import { AUTH_ENABLED } from '@/services/supabase';
 import { useStore } from '@/state/store';
 import { cn } from '@/lib/cn';
 import { Popover, useNow } from './primitives';
@@ -29,6 +31,8 @@ const V2 = [
 
 function OperatorsLink() {
   const unread = useStore((s) => s.operator.unread);
+  useAuth((s) => s.profile?.operators_enabled);
+  if (!operatorsAllowed()) return null;
   return (
     <NavLink
       to="/operadores"
@@ -73,7 +77,40 @@ export function TopNav() {
           <Settings size={14} />
           <span className="hidden sm:inline">Configurações</span>
         </NavLink>
+        <AdminLink />
       </nav>
+      <UserBox />
+    </div>
+  );
+}
+
+function AdminLink() {
+  const admin = useAuth((s) => s.profile?.is_admin);
+  if (!admin) return null;
+  return (
+    <NavLink to="/admin" className={({ isActive }) => cn('flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}>
+      <Shield size={14} />
+      <span className="hidden sm:inline">Admin</span>
+    </NavLink>
+  );
+}
+
+function UserBox() {
+  const email = useAuth((s) => s.profile?.email ?? s.session?.user.email);
+  if (!AUTH_ENABLED) return null;
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <span className="num hidden max-w-[180px] truncate text-[11px] text-dim lg:inline">{email}</span>
+      <button
+        className="btn-ghost h-7"
+        title="Sair"
+        onClick={async () => {
+          await useAuth.getState().signOut();
+          window.location.assign('/'); // limpa a memória da sessão anterior
+        }}
+      >
+        <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
+      </button>
     </div>
   );
 }

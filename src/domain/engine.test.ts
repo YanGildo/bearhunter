@@ -26,7 +26,7 @@ function obs(t: number, o: Partial<MarketObservation> & { w5?: Partial<WindowMet
   };
 }
 
-const strong = defaultPresets().strong.tf['5m'];
+const strong = { ...defaultPresets().strong.tf['5m'], minTxns: null };
 const T0 = 1_800_000_000_000;
 
 describe('findPrevious', () => {

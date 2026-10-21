@@ -172,6 +172,11 @@ await page.locator('textarea').nth(1).fill(`https://gmgn.ai/sol/token/${TOKENS[0
 await page.getByRole('button', { name: /Analisar/ }).click();
 await page.waitForTimeout(3000);
 const farmFound = await page.locator('text=/em 2 token/').count();
+await page.getByRole('button', { name: /^É ele$/ }).first().click();
+await page.waitForTimeout(400);
+await page.getByRole('button', { name: /Gerar relatório/ }).click();
+await page.waitForTimeout(2500);
+const reportOk = (await page.locator('textarea[readonly]').inputValue().catch(() => '')).includes('Relatório do operador');
 await page.screenshot({ path: `${OUT}/08-operadores.png`, fullPage: true });
 
 const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -185,7 +190,7 @@ await mp.goto(`http://localhost:${PORT}/settings?tab=fontes`);
 await mp.waitForTimeout(1500);
 await mp.screenshot({ path: `${OUT}/07-mobile-settings.png` });
 
-console.log(JSON.stringify({ alertsText, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);

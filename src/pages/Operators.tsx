@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, LineChart, Plus, Search, Skull, Trash2, Wallet, Radar, Settings2, Users, Zap } from 'lucide-react';
+import { Copy, ExternalLink, LineChart, Plus, Search, Skull, Trash2, Wallet, Radar, Settings2, Users, Zap, Check, X, FileText, Undo2, BadgeCheck } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { useUi } from '@/state/ui';
 import { operatorTracker, type HolderRow } from '@/operators/tracker';
@@ -41,6 +41,35 @@ function Card({ title, icon: Icon, children, right }: { title: string; icon: typ
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </section>
+  );
+}
+
+/** Botões "É ele" / "Não é ele" para um token. */
+function Verdict({ mint }: { mint: string }) {
+  const confirmed = useStore((s) => !!s.operator.confirmed[mint]);
+  return (
+    <span className="flex items-center gap-1.5">
+      <button
+        className={cn('flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] font-bold', confirmed ? 'border-up/70 bg-up/20 text-up' : 'border-up/40 text-up hover:bg-up/10')}
+        title="Confirmar que este token é do operador"
+        onClick={() => {
+          operatorTracker.confirm(mint);
+          toast('Token salvo nos confirmados');
+        }}
+      >
+        <Check size={11} /> {confirmed ? 'É ele ✓' : 'É ele'}
+      </button>
+      <button
+        className="flex items-center gap-1 rounded border border-down/40 px-1.5 py-0.5 text-[10.5px] font-bold text-down hover:bg-down/10"
+        title="Não é ele: oculta tudo deste token"
+        onClick={() => {
+          operatorTracker.discard(mint);
+          toast('Token descartado e oculto (pode desfazer em Descartados)');
+        }}
+      >
+        <X size={11} /> Não é ele
+      </button>
+    </span>
   );
 }
 
@@ -189,6 +218,9 @@ function SignalRow({ s, now }: { s: OperatorSignal; now: number }) {
           <button className="flex items-center gap-1 text-muted hover:text-fg" onClick={() => void copyText(s.mint!).then(() => toast('CA copiado'))}>
             <Copy size={12} /> CA
           </button>
+          <span className="ml-auto">
+            <Verdict mint={s.mint} />
+          </span>
           {s.kind === 'transferencia' && s.wallets[1] && !knownCp && (
             <button
               className="flex items-center gap-1 text-revival hover:underline"
@@ -255,6 +287,7 @@ function OpTokens() {
   const tokens = useStore((s) => s.operator.tokens);
   const market = useStore((s) => s.tokens);
   const scams = useStore((s) => s.scams);
+  const confirmed = useStore((s) => s.operator.confirmed);
   const now = useNow(10_000);
   const list = useMemo(() => Object.values(tokens).sort((a, b) => b.lastSignalAt - a.lastSignalAt).slice(0, 60), [tokens]);
   return (
@@ -284,6 +317,11 @@ function OpTokens() {
                 <span className={cn('chip', toneCls[SIGNAL_META[t.reason].tone])}>{SIGNAL_META[t.reason].label}</span>
                 {t.botsState && <span className={cn('chip', t.botsState === 'on' ? 'border-up/50 text-up' : 'border-warn/50 text-warn')}>bots {t.botsState}</span>}
                 {scams[t.mint] && <ScamBadge />}
+                {confirmed[t.mint] && (
+                  <span className="chip border-up/60 bg-up/15 text-up">
+                    <BadgeCheck size={10} /> confirmado
+                  </span>
+                )}
                 <span className="num ml-auto text-[10.5px] text-dim">{fmtAge(born, now)}</span>
               </div>
               <div className="mt-1.5 grid grid-cols-4 gap-2">
@@ -322,9 +360,131 @@ function OpTokens() {
                   </button>
                 </span>
               </div>
+              <div className="mt-1.5">
+                <Verdict mint={t.mint} />
+              </div>
             </div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+// ---------- confirmados ----------
+
+function Confirmed() {
+  const confirmed = useStore((s) => s.operator.confirmed);
+  const discarded = useStore((s) => s.operator.discarded);
+  const market = useStore((s) => s.tokens);
+  const [text, setText] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [report, setReport] = useState<string | null>(null);
+  const [showDiscarded, setShowDiscarded] = useState(false);
+  const list = Object.entries(confirmed).sort((a, b) => b[1].at - a[1].at);
+  const add = () => {
+    const mints = extractAddresses(text);
+    if (!mints.length) return toast('Cole o CA ou o link do token');
+    mints.forEach((m) => operatorTracker.confirm(m, note.trim()));
+    toast(`${mints.length} token(s) salvo(s) nos confirmados`);
+    setText('');
+    setNote('');
+  };
+  const setNoteOf = (mint: string, v: string) => {
+    const op = useStore.getState().operator;
+    useStore.setState({ operator: { ...op, confirmed: { ...op.confirmed, [mint]: { ...op.confirmed[mint], note: v } } } });
+  };
+  const remove = (mint: string) => {
+    const op = useStore.getState().operator;
+    const c = { ...op.confirmed };
+    delete c[mint];
+    useStore.setState({ operator: { ...op, confirmed: c } });
+  };
+  const gen = async () => {
+    setBusy('0/' + list.length);
+    const r = await operatorTracker.report((d, t) => setBusy(`${d}/${t}`));
+    setReport(r);
+    setBusy(null);
+    void copyText(r).then((ok) => ok && toast('Relatório copiado — cole no chat'));
+  };
+  return (
+    <Card
+      title={`Confirmados do operador (${list.length})`}
+      icon={BadgeCheck}
+      right={
+        <button className="btn h-7" disabled={!list.length || !!busy} onClick={gen}>
+          <FileText size={12} /> {busy ? `Gerando ${busy}…` : 'Gerar relatório'}
+        </button>
+      }
+    >
+      <div className="space-y-2 border-b border-line p-3">
+        <div className="flex flex-wrap gap-1.5">
+          <input className="input num h-8 min-w-[200px] flex-[2]" placeholder="CA ou link do token (vários separados por espaço)" value={text} onChange={(e) => setText(e.target.value)} />
+          <input className="input h-8 min-w-[120px] flex-1" placeholder="Nota (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="btn h-8 border-up/50 bg-up/10 text-up" onClick={add}>
+            <Plus size={13} /> Salvar
+          </button>
+        </div>
+        <p className="text-[10.5px] text-dim">Aqui ficam só os tokens que você confirmou que são dele. O relatório junta os dados públicos (DexScreener) e o que o bot observou, pronto para colar no chat.</p>
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        {!list.length && <div className="p-4 text-center text-[11px] text-dim">Nenhum token confirmado. Use "É ele" nos sinais ou cole o CA acima.</div>}
+        {list.map(([mint, c]) => (
+          <div key={mint} className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[11px]">
+            <button className="font-bold hover:underline" onClick={() => openChart(mint)}>
+              {market[mint]?.meta.symbol ?? c.symbol ?? shortAddr(mint)}
+            </button>
+            <span className="num text-dim">{shortAddr(mint, 5)}</span>
+            <span className="num text-muted">MCAP {fmtUsd(market[mint]?.lastObservation?.marketCapUsd)}</span>
+            <input className="min-w-[100px] flex-1 bg-transparent text-[11px] text-fg/80 outline-none" placeholder="nota…" value={c.note} onChange={(e) => setNoteOf(mint, e.target.value)} />
+            <a className="text-dim hover:text-fg" href={gmgnUrl(mint)} target="_blank" rel="noreferrer">
+              GMGN
+            </a>
+            <button className="btn-ghost hover:text-down" title="Tirar dos confirmados" onClick={() => remove(mint)}>
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {report && (
+        <div className="space-y-1.5 border-t border-line p-3">
+          <div className="flex gap-2">
+            <button className="btn h-7" onClick={() => void copyText(report).then(() => toast('Copiado'))}>
+              <Copy size={12} /> Copiar
+            </button>
+            <button
+              className="btn h-7"
+              onClick={() => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([report], { type: 'text/markdown' }));
+                a.download = `relatorio-operador-${new Date().toISOString().slice(0, 10)}.md`;
+                a.click();
+              }}
+            >
+              <FileText size={12} /> Baixar .md
+            </button>
+          </div>
+          <textarea readOnly className="input num h-40 py-2 text-[10.5px]" value={report} />
+        </div>
+      )}
+      <div className="border-t border-line px-3 py-1.5">
+        <button className="text-[11px] text-muted hover:text-fg" onClick={() => setShowDiscarded(!showDiscarded)}>
+          Descartados ("não é ele"): {Object.keys(discarded).length} {showDiscarded ? '▲' : '▼'}
+        </button>
+        {showDiscarded && (
+          <div className="mt-1 max-h-40 overflow-y-auto">
+            {Object.entries(discarded).map(([mint, at]) => (
+              <div key={mint} className="num flex items-center gap-2 py-0.5 text-[10.5px] text-dim">
+                <span>{market[mint]?.meta.symbol ?? shortAddr(mint, 5)}</span>
+                <span>{new Date(at).toLocaleString('pt-BR')}</span>
+                <button className="ml-auto flex items-center gap-1 hover:text-fg" onClick={() => operatorTracker.undiscard(mint)}>
+                  <Undo2 size={11} /> desfazer
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -441,6 +601,34 @@ function Num({ label, value, onChange, unit, help }: { label: string; value: num
   );
 }
 
+function PumpKey() {
+  const key = useStore((st) => st.prefs.pumpPortalKey);
+  const [v, setV] = useState(key);
+  const [show, setShow] = useState(false);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-2">
+        <input className="input num min-w-[220px] flex-1" type={show ? 'text' : 'password'} placeholder="cole aqui a API key do PumpPortal" value={v} onChange={(e) => setV(e.target.value)} />
+        <button className="btn h-8" onClick={() => setShow(!show)}>
+          {show ? 'Ocultar' : 'Mostrar'}
+        </button>
+        <button
+          className="btn h-8 border-primary/50 bg-primary/15 text-primary"
+          onClick={() => {
+            useStore.getState().setPrefs({ pumpPortalKey: v.trim() });
+            toast(v.trim() ? 'API key salva — trades das carteiras em tempo real ligados' : 'API key removida');
+          }}
+        >
+          Salvar
+        </button>
+      </div>
+      <p className="text-[10.5px] text-dim">
+        Com a key, as compras e vendas das carteiras chegam direto do PumpPortal (subscribeAccountTrade, 0,01 SOL a cada 10 mil eventos, cobrado da carteira ligada à key). A key fica salva só neste navegador e não vai para a nuvem. Status: {key ? <b className="text-up">ativa</b> : 'sem key (usando só a RPC)'}.
+      </p>
+    </div>
+  );
+}
+
 function Settings() {
   const s = useStore((st) => st.operator.settings);
   const rpcUrl = useStore((st) => st.prefs.rpcUrl);
@@ -503,6 +691,10 @@ function Settings() {
             </select>
           </div>
         </div>
+        <div className="space-y-2 md:col-span-2">
+          <div className="label">PumpPortal — API key (opcional, canal pago)</div>
+          <PumpKey />
+        </div>
         <div className="space-y-2">
           <div className="label">RPC da Solana</div>
           <div className="flex gap-2">
@@ -550,9 +742,10 @@ export default function Operators() {
           <OpTokens />
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
+          <Confirmed />
           <Discover />
-          <Settings />
         </div>
+        <Settings />
       </div>
     </div>
   );

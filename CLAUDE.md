@@ -2,15 +2,15 @@
 
 Terminal de monitoramento de memecoins na Solana focado em **volume**: descobre tokens (Pump.fun novos/migrados + destaques do DexScreener), tira snapshots, compara e **apita** quando um token bate os presets do usuário. Não executa trades. Dono do projeto: Yan (fala português; respostas e textos de UI em PT-BR).
 
-## Estado atual: v1 pessoal (custo zero)
-- 100% no navegador, sem backend, sem login. A coleta roda enquanto a aba está aberta (START/STOP).
+## Estado atual: v1 (custo zero)
+- Coleta 100% no navegador. Login opcional via Supabase (`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`): sem essas variáveis roda em modo local sem login. Com elas: cadastro → `pending` → admin aprova em `/admin`; Operadores só para quem o admin liberar (`operators_enabled`). Configurações do usuário sincronizam na tabela `user_state` (`src/services/cloudSync.ts`); a API key do PumpPortal nunca vai para a nuvem. SQL em `supabase/migrations/001_init.sql`. Admin = yangildomourafranca@gmail.com. A coleta roda enquanto a aba está aberta (START/STOP).
 - Persistência local: zustand `persist` (localStorage) para presets/prefs/pastas/favoritos/My Alerts/tokens manuais; IndexedDB (`src/storage/db.ts`) para alertas, snapshots (48h) e sons enviados.
 - Deploy previsto: Cloudflare Pages (estático, grátis). `public/_redirects` faz o fallback de SPA.
 - Se o DexScreener bloquear CORS no navegador: `proxy/worker.js` (Cloudflare Workers grátis) e URL em Configurações → Fontes.
 
 ## Fontes autorizadas pelo usuário
 - **DexScreener** (API pública): `/tokens/v1/solana/{até 30}`, `/token-boosts/{top,latest}/v1`, `/token-profiles/latest/v1`, `/latest/dex/search`. Limite oficial 300/min (usamos 240) e 60/min nas listas (usamos 40).
-- **PumpPortal**: SOMENTE os canais grátis `subscribeNewToken` e `subscribeMigration`, uma única conexão WS. `subscribeTokenTrade`/`subscribeAccountTrade` são pagos (0,01 SOL/10k msgs, exigem API key) — **não usar** sem o usuário pedir.
+- **PumpPortal**: SOMENTE os canais grátis `subscribeNewToken` e `subscribeMigration`, uma única conexão WS. `subscribeAccountTrade` (pago, 0,01 SOL/10k msgs) é usado SÓ quando o usuário cola a própria API key em Operadores → Ajustes (`prefs.pumpPortalKey`, local). `subscribeTokenTrade` não é usado.
 - **RPC pública da Solana** (`api.mainnet-beta.solana.com`, HTTP + WS), autorizada para o módulo Operadores: `logsSubscribe` (mentions), `getSignaturesForAddress`, `getTransaction`, `getTokenSupply`, `getTokenLargestAccounts`, `getMultipleAccounts`. Limitador em 30 req/10s. URL configurável (o usuário pode colar Helius/QuickNode grátis).
 - Não integrar outras APIs (Solscan API, Helius pago, Birdeye, GeckoTerminal, Meteora etc.) sem autorização explícita.
 

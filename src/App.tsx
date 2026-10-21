@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
@@ -14,9 +14,24 @@ import { ChartModal } from './ui/context/ContextPanel';
 import { Toaster } from './ui/primitives';
 import { collector } from './collector/collector';
 import { unlockAudio } from './services/sound';
+import Admin from './pages/Admin';
+import { LoadingPage, LoginPage, PendingPage } from './pages/Login';
+import { operatorsAllowed, useAuth } from './state/auth';
+import { AUTH_ENABLED } from './services/supabase';
+import { startCloudSync } from './services/cloudSync';
 
 function Shell() {
   const loc = useLocation();
+  useAuth((s) => s.profile);
+  useEffect(() => {
+    // Coleta começa ao abrir o painel (como no projeto antigo). STOP pausa.
+    operatorTracker.allowedForUser = operatorsAllowed;
+    operatorTracker.init();
+    void collector.start().then(() => operatorTracker.start());
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+  }, []);
   const dash = loc.pathname.startsWith('/dashboard');
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -31,7 +46,8 @@ function Shell() {
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/history" element={<History />} />
-        <Route path="/operadores" element={<Operators />} />
+        <Route path="/operadores" element={operatorsAllowed() ? <Operators /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
@@ -44,14 +60,22 @@ function Shell() {
 }
 
 export default function App() {
+  const status = useAuth((s) => s.status);
+  const uid = useAuth((s) => s.session?.user.id);
+  const error = useAuth((s) => s.error);
+  const [synced, setSynced] = useState(!AUTH_ENABLED);
   useEffect(() => {
-    // Coleta começa ao abrir o painel (como no projeto antigo). STOP pausa.
-    operatorTracker.init();
-    void collector.start().then(() => operatorTracker.start());
-    const unlock = () => unlockAudio();
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
+    void useAuth.getState().init();
   }, []);
+  useEffect(() => {
+    if (status === 'active' && uid && !synced) void startCloudSync(uid).finally(() => setSynced(true));
+  }, [status, uid, synced]);
+  if (status === 'loading') return <LoadingPage />;
+  if (status === 'signedOut') return <LoginPage />;
+  if (status === 'pending') return <PendingPage />;
+  if (status === 'blocked') return <PendingPage blocked />;
+  if (status === 'error') return <LoadingPage text={`Erro ao carregar o perfil: ${error ?? ''}`} />;
+  if (!synced) return <LoadingPage text="Carregando suas configurações…" />;
   return (
     <BrowserRouter>
       <Shell />

@@ -94,7 +94,15 @@ export interface OperatorSettings {
   soundOnCandidates: boolean;
 }
 
+export interface ConfirmedToken {
+  at: number;
+  symbol: string | null;
+  note: string;
+}
+
 export interface OperatorState {
+  confirmed: Record<string, ConfirmedToken>; // tokens que você confirmou como dele
+  discarded: Record<string, number>; // tokens que você disse que NÃO são dele (ficam ocultos)
   wallets: OperatorWallet[];
   signals: OperatorSignal[];
   tokens: Record<string, OperatorToken>;
@@ -121,6 +129,8 @@ export const DEFAULT_OPERATOR_SETTINGS: OperatorSettings = {
 };
 
 export const EMPTY_OPERATOR_STATE: OperatorState = {
+  confirmed: {},
+  discarded: {},
   wallets: [],
   signals: [],
   tokens: {},

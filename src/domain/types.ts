@@ -58,7 +58,8 @@ export type DiscoverySource =
   | 'boosted'
   | 'profile'
   | 'search'
-  | 'operator';
+  | 'operator'
+  | 'graveyard';
 
 export type TrackStatus = 'waiting' | 'active' | 'stale';
 

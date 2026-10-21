@@ -86,6 +86,18 @@ Aba separada para acompanhar um operador específico (quem lança tokens com o m
 ## Aba em segundo plano
 O relógio do bot roda num Web Worker, então a coleta, os alertas e os sons continuam com a aba escondida. Se o som não tocar, clique uma vez na página depois de abrir (o navegador exige um clique para liberar áudio).
 
+## Confirmar ou descartar tokens do operador
+Em cada sinal e token da aba Operadores há **É ele** (vai para "Confirmados do operador") e **Não é ele** (oculta tudo daquele token e ignora sinais futuros; dá para desfazer em "Descartados"). Em **Confirmados** você também cola CAs manualmente, escreve notas e clica em **Gerar relatório**, um texto pronto para colar no chat com criação, tempo até migrar, MCAP, volume, perfil pago, pico observado, sinais e carteiras da lista.
+
+## PumpPortal pago (opcional)
+Cole sua API key em Operadores → Ajustes. Com ela, as compras e vendas das carteiras chegam direto do PumpPortal em tempo real (0,01 SOL a cada 10 mil eventos). A key fica só no seu navegador.
+
+## Login e Admin
+Com o Supabase configurado, quem se cadastra fica **pendente** até o admin aprovar em **Admin**. O admin também libera a aba **Operadores** por usuário. Presets, Watchlist, pastas, My Alerts e carteiras de operador ficam salvos na conta.
+
+## Presets padrão (v2)
+Initial = números do DRK (vol +50%, MCAP +50%, vol ≥ $500, MCAP ≥ $10K). Strong: vol +50%, MCAP +40%, vol ≥ $5K, MCAP ≥ $25K, ≥ 80 txns em 5m. Explosive: vol +100%, MCAP +75%, vol ≥ $20K, MCAP ≥ $40K, ≥ 200 txns, preço +10%, cooldown 180s. Revival: multiplicador 10x, piso $1,5K e **cemitério** (tokens que saíram por falta de volume são reconferidos devagar).
+
 ## My Alerts
 Alertas manuais por token (MCAP, Volume 5M, Variação 5M, Liquidez; maior/menor que). Roxo, badge CUSTOM, som próprio. Disparam uma vez; use "rearmar" para armar de novo.
 

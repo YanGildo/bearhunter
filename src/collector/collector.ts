@@ -50,6 +50,9 @@ class Collector {
   private tickTimer: (() => void) | null = null;
   private tickCount = 0;
   private lastTrendingAt = 0;
+  private buryLater: string[] = [];
+  private graveCursor = 0;
+  private lastGraveAt = 0;
   private lastErrorFeedAt = 0;
   private booted: Promise<void> | null = null;
 
@@ -118,7 +121,8 @@ class Collector {
 
   private wantsPumpPortal() {
     const s = getState();
-    return s.prefs.discoverNew || s.prefs.discoverMigrations || (s.operator.settings.enabled && s.operator.settings.detectFastMigration);
+    const opOn = s.operator.settings.enabled && operatorHooks.isEnabledForUser?.() !== false;
+    return s.prefs.discoverNew || s.prefs.discoverMigrations || (opOn && (s.operator.settings.detectFastMigration || (!!s.prefs.pumpPortalKey && s.operator.wallets.length > 0)));
   }
 
   private syncHealth() {
@@ -355,6 +359,53 @@ class Collector {
     }
     if (this.pendingSnapshots.length >= 50 || (this.pendingSnapshots.length && now % 10_000 < 1000)) void this.flushSnapshots();
     this.checkResort(now);
+    this.checkGraveyard(now);
+  }
+
+  /**
+   * Cemitério do Revival: tokens que saíram por falta de volume são conferidos devagar
+   * (1 lote de 30 a cada 6s, só com folga no limite). Se um deles voltar a ter volume real,
+   * entra de novo na lista e o Revival avalia.
+   */
+  private checkGraveyard(now: number) {
+    const s = getState();
+    if (this.buryLater.length) {
+      const g = { ...s.graveyard };
+      for (const a of this.buryLater) g[a] = now;
+      this.buryLater = [];
+      const keys = Object.keys(g);
+      if (keys.length > 3000) keys.sort((x, y) => g[x] - g[y]).slice(0, keys.length - 3000).forEach((k) => delete g[k]);
+      useStore.setState({ graveyard: g });
+    }
+    if (!s.prefs.revivalGraveyard || !s.presets.revival.active) return;
+    if (now - this.lastGraveAt < 6000 || this.ds.marketCapacity() < 120) return;
+    const all = Object.keys(getState().graveyard).filter((a) => !s.tokens[a]);
+    if (!all.length) return;
+    this.lastGraveAt = now;
+    if (this.graveCursor >= all.length) this.graveCursor = 0;
+    const batch = all.slice(this.graveCursor, this.graveCursor + this.ds.maxBatch);
+    this.graveCursor += batch.length;
+    const cfg = s.presets.revival.revival;
+    void this.ds
+      .fetchTokens(batch)
+      .then((res) => {
+        const g = { ...getState().graveyard };
+        const week = Date.now() - 7 * 86400_000;
+        for (const a of res.missing) delete g[a];
+        for (const o of res.observations) {
+          const v5 = o.windows['5m'].volumeUsd;
+          if (g[o.tokenAddress] < week) delete g[o.tokenAddress];
+          if (v5 != null && cfg && v5 >= cfg.realVolumeFloor) {
+            const m = res.metas.find((x) => x.address === o.tokenAddress);
+            delete g[o.tokenAddress];
+            if (this.addToken(o.tokenAddress, 'graveyard', { symbol: m?.symbol, name: m?.name, imageUrl: m?.imageUrl })) {
+              getState().pushFeed({ kind: 'discovery', text: `Cemitério: ${m?.symbol ?? o.tokenAddress.slice(0, 6)} voltou com ${fmtUsd(v5)} em 5m` });
+            }
+          }
+        }
+        useStore.setState({ graveyard: g });
+      })
+      .catch(() => {});
   }
 
   private checkResort(now: number) {
@@ -469,6 +520,7 @@ class Collector {
         if (BLUE_CHIPS.has(sym) || tooBig || deadNew || noVol || belowStay) {
           delete tokens[t.address];
           removed.push(t.address);
+          if (noVol && !deadNew) this.buryLater.push(t.address); // vai para o cemitério do Revival
           continue;
         }
       }

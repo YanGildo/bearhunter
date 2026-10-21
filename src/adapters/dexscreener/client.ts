@@ -106,6 +106,16 @@ export class DexScreenerAdapter implements MarketAdapter {
     return { observations, metas, missing };
   }
 
+  /** Todos os pares de um token (inclui a bonding curve e os pools migrados), já normalizados. */
+  async tokenPairs(token: string): Promise<{ observation: MarketObservation; hasProfile: boolean }[]> {
+    const pairs = await this.get<DsPair[]>(`/token-pairs/v1/solana/${token}`, this.marketLimiter);
+    const now = Date.now();
+    return (Array.isArray(pairs) ? pairs : [])
+      .filter((p) => p.chainId === 'solana' && p.baseToken?.address === token)
+      .map((p) => ({ observation: normalizePair(p, now, this.id), hasProfile: !!(p.info?.imageUrl || p.info?.websites?.length || p.info?.socials?.length) }))
+      .filter((x): x is { observation: MarketObservation; hasProfile: boolean } => !!x.observation);
+  }
+
   async listTrending(): Promise<DiscoveredToken[]> {
     const now = Date.now();
     const out = new Map<string, DiscoveredToken>();

@@ -40,6 +40,7 @@ function tfSet(over: Partial<TimeframeConfig>): Record<Timeframe, TimeframeConfi
   for (const tf of TIMEFRAMES) {
     const o = { ...base, ...over };
     if (o.minVol != null) o.minVol = o.minVol * volScale[tf];
+    if (o.minTxns != null) o.minTxns = Math.round(o.minTxns * volScale[tf]);
     out[tf] = o;
   }
   return out;
@@ -47,8 +48,8 @@ function tfSet(over: Partial<TimeframeConfig>): Record<Timeframe, TimeframeConfi
 
 export const DEFAULT_REVIVAL: RevivalConfig = {
   deadBaselineCeiling: 500,
-  spikeMultiplier: 20,
-  realVolumeFloor: 2000,
+  spikeMultiplier: 10,
+  realVolumeFloor: 1500,
   liquidityCeiling: 50000,
   minPairAgeH: 24,
   deadWindowMin: 60,
@@ -63,7 +64,8 @@ export function defaultPresets(): Record<PresetKey, PresetConfig> {
       key: 'initial',
       active: true,
       timeframes: ['5m'],
-      tf: tfSet({ volRisePct: 50, mcapRisePct: 30, minVol: 10000, minMcap: 10000, maxMcap: 1_000_000 }),
+      // Initial = números do indicador DRK (o mais sensível)
+      tf: tfSet({ volRisePct: 50, mcapRisePct: 50, minVol: 500, minMcap: 10000, maxMcap: null }),
       soundId: 'builtin:initial',
       volume: 0.7,
     },
@@ -71,7 +73,8 @@ export function defaultPresets(): Record<PresetKey, PresetConfig> {
       key: 'strong',
       active: true,
       timeframes: ['5m'],
-      tf: tfSet({ volRisePct: 100, mcapRisePct: 100, minVol: 30000, minMcap: 25000, maxMcap: 500_000 }),
+      // Strong: mesma subida %, mas dinheiro e participação maiores
+      tf: tfSet({ volRisePct: 50, mcapRisePct: 40, minVol: 5000, minMcap: 25000, maxMcap: null, minTxns: 80 }),
       soundId: 'builtin:strong',
       volume: 0.7,
     },
@@ -79,7 +82,8 @@ export function defaultPresets(): Record<PresetKey, PresetConfig> {
       key: 'explosive',
       active: true,
       timeframes: ['5m'],
-      tf: tfSet({ volRisePct: 200, mcapRisePct: 150, minVol: 50000, minMcap: 25000, maxMcap: 2_000_000 }),
+      // Explosive: subida forte + dinheiro grande ao mesmo tempo; cooldown menor para repetir se a força continuar
+      tf: tfSet({ volRisePct: 100, mcapRisePct: 75, minVol: 20000, minMcap: 40000, maxMcap: null, minTxns: 200, minChangePct: 10, cooldownS: 180 }),
       soundId: 'builtin:explosive',
       volume: 0.8,
     },
@@ -95,6 +99,7 @@ export function defaultPresets(): Record<PresetKey, PresetConfig> {
   };
 }
 
+export const PRESETS_VERSION = 2;
 export const MAX_INDICATORS = 3;
 export const INDICATOR_COLORS: IndicatorColor[] = ['cyan', 'pink', 'lime'];
 
