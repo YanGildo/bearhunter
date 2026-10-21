@@ -1,0 +1,69 @@
+# BearHunter Bot — Documentação (v1 pessoal)
+
+## O que é
+Terminal de monitoramento de memecoins na Solana, focado em **volume**. Descobre tokens da Pump.fun (novos e migrados) e destaques do DexScreener, tira snapshots periódicos, compara com os snapshots anteriores e **apita** quando um token bate os parâmetros de um preset (Initial, Strong, Explosive, Revival) ou de um My Alert.
+
+Não executa compras ou vendas. Os sinais são métricas de mercado e não garantem segurança ou retorno.
+
+## Como roda (v1)
+- Tudo roda **no seu navegador**, enquanto a aba está aberta. Não há servidor, banco pago nem login.
+- A coleta começa quando você abre o painel. **STOP** pausa, **START** retoma.
+- Dados ficam salvos neste navegador: presets, Watchlist, pastas, favoritos, My Alerts, alertas (IndexedDB) e snapshots dos últimos 2 dias.
+- Para levar para outro computador: Configurações → Dados → Exportar.
+- Dica: deixe a aba numa janela própria. Navegadores desaceleram abas escondidas por muito tempo.
+
+## Fontes de dados
+| Fonte | Para quê | Custo |
+|---|---|---|
+| PumpPortal (`subscribeNewToken`, `subscribeMigration`) | descobrir tokens novos e migrações | grátis, sem API key |
+| DexScreener (`/tokens/v1`, boosts, perfis, busca) | MCAP, volume, compras/vendas, variação 5m/1h/6h/24h, liquidez, idade do par | grátis, até 300 req/min |
+
+- Uma única conexão WebSocket com o PumpPortal, com reconexão automática (2s → 60s).
+- DexScreener em lotes de 30 tokens, limitado a 240 req/min (abaixo do limite oficial).
+- Tokens ainda na **bonding curve** aparecem como `curve` (dexId `pumpfun`). O DexScreener **não informa liquidez** nesses pares — o painel mostra "curve"/"—", nunca zero.
+- Se o navegador bloquear o DexScreener (CORS), publique `proxy/worker.js` no Cloudflare Workers (grátis) e cole a URL em Configurações → Fontes.
+
+## Regra de ouro dos dados
+`null` = desconhecido. Zero só quando a fonte reporta zero. Um filtro que depende de um dado ausente **rejeita com motivo** (ex.: `liquidity_unknown`) em vez de inventar.
+
+## Universo de tokens
+- **Manuais** (Add Token / busca) e **favoritos/pastas** nunca saem sozinhos.
+- **Novos da Pump.fun**: saem após o tempo configurado (padrão 10 min) se o volume de 5m ficar abaixo de $1K, ou se o DexScreener não encontrar o par.
+- **No Vol Remove**: tokens automáticos saem após N ciclos sem volume.
+- Stablecoins/blue chips e tokens acima de $250M de MCAP saem da lista automática.
+- **Max Tokens** limita o tamanho da lista; ao encher, sai o token automático com menos volume.
+- **Hi Vol Threshold**: badge HOT e prioridade de coleta (não alerta sozinho).
+
+## Presets
+Cada preset tem configuração independente por timeframe (5M, 1H, 6H, 24H). Marque quais timeframes monitorar e clique no rótulo para editar.
+
+- **Vol Rise**: (volume atual − volume do snapshot anterior) / anterior × 100. O "anterior" é o snapshot de ~1 Check Interval atrás (nem perto nem velho demais).
+- **MCap Rise**: mesma conta para o market cap.
+- **Min/Max Vol, Min/Max MCap, Min/Max Change, Min/Max Txns, Min/Max Liquidity, Pair Age**: faixas. Vazio = sem filtro.
+- **Direção**: Buy exige preço subindo e (quando há dado) mais compras que vendas. Sell o contrário. Volume alto com preço caindo **nunca** vira Buy.
+- **Check Interval**: de quanto em quanto tempo o preset avalia cada token. O menor intervalo entre os presets ativos define o ritmo da coleta (mínimo 10s).
+- **Alert Cooldown**: um mesmo token + par + preset + timeframe + direção não alerta de novo antes desse tempo.
+
+### Revival
+Token "morto" que acorda. Usa só os parâmetros próprios:
+- **Dead Baseline Ceiling**: volume de 5m máximo para considerar morto.
+- **Spike Multiplier**: quantas vezes o volume atual precisa estar acima do baseline.
+- **Real Volume Floor**: volume mínimo do pico.
+- **Liquidity Ceiling**, **Min Pair Age**, **Janela mínima morta**, **Janela de análise**.
+- Baseline = mediana do volume 5m que o bot observou (`src:snapshots`). Sem histórico suficiente, é estimado pelas janelas 1H/6H/24H do DexScreener (`src:windows_estimate`, `conf:low`).
+
+## My Alerts
+Alertas manuais por token (MCAP, Volume 5M, Variação 5M, Liquidez; maior/menor que). Roxo, badge CUSTOM, som próprio. Disparam uma vez; use "rearmar" para armar de novo.
+
+## Sons
+Sons embutidos para cada preset e upload dos seus (mp3/wav/ogg/m4a) em Configurações → Sons. O som só toca depois que o alerta final é criado, com 2s de intervalo mínimo por preset. O navegador só libera áudio depois do primeiro clique na página.
+
+## Painéis
+1. **Watchlist / My Alerts** — busca, timeframe, ordenação (VOL/MCAP/LIQ/PEAK), Boosted, pastas, favoritos. A ordem reordena no ritmo do "Auto"; os números atualizam ao vivo.
+2. **Alerts** — filtros por preset, busca, ações (gráfico, DexScreener, GMGN, X, copiar CA).
+3. **Gráfico / Histórico** — gráfico do DexScreener; o Histórico mostra os snapshots observados, os alertas do token e **por que ele alertou ou não** no último ciclo (útil para calibrar presets).
+
+"PEAK" é o maior MCAP que o bot viu, não o ATH absoluto.
+
+## Versão 2 (planejado)
+Ganhadores, Snipe Desk, Telegram, contas de usuário, coleta sempre ligada num servidor.

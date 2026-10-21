@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 240 10% 4%;
+  --panel: 240 9% 5.5%;
+  --card: 240 9% 7.5%;
+  --raised: 240 8% 11%;
+  --line: 240 7% 15%;
+  --fg: 240 10% 94%;
+  --muted: 240 5% 62%;
+  --dim: 240 5% 42%;
+  --primary: 262 83% 66%;
+  --up: 142 71% 50%;
+  --down: 0 84% 62%;
+  --initial: 217 91% 62%;
+  --strong: 142 71% 48%;
+  --explosive: 0 84% 60%;
+  --revival: 32 95% 55%;
+  --custom: 270 80% 68%;
+  --warn: 45 95% 55%;
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+  font-size: 13px;
+  overflow: hidden;
+}
+* { scrollbar-width: thin; scrollbar-color: hsl(var(--line)) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: hsl(var(--line)); border-radius: 6px; }
+
+@layer components {
+  .num { @apply font-mono tabular-nums; }
+  .label { @apply text-[10px] uppercase tracking-wider text-dim font-medium; }
+  .chip { @apply inline-flex items-center gap-1 rounded px-1.5 py-[1px] text-[10px] font-semibold uppercase tracking-wide border; }
+  .btn { @apply inline-flex items-center gap-1.5 rounded-md border border-line bg-card px-2.5 h-7 text-[11px] font-semibold text-fg/90 hover:bg-raised transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap; }
+  .btn-ghost { @apply inline-flex items-center gap-1 rounded px-1.5 h-6 text-[11px] text-muted hover:text-fg hover:bg-raised transition-colors; }
+  .input { @apply h-8 w-full rounded-md border border-line bg-card px-2.5 text-[12px] text-fg placeholder:text-dim outline-none focus:border-primary/60; }
+  .tab { @apply px-2 h-6 rounded text-[11px] font-medium text-muted hover:text-fg; }
+  .tab-active { @apply bg-primary/20 text-primary; }
+}
+
+.glow-initial { box-shadow: 0 0 0 1px hsl(var(--initial) / .55), 0 0 18px -6px hsl(var(--initial) / .5); }
+.glow-strong { box-shadow: 0 0 0 1px hsl(var(--strong) / .55), 0 0 18px -6px hsl(var(--strong) / .5); }
+.glow-explosive { box-shadow: 0 0 0 1px hsl(var(--explosive) / .55), 0 0 18px -6px hsl(var(--explosive) / .5); }
+.glow-revival { box-shadow: 0 0 0 1px hsl(var(--revival) / .55), 0 0 18px -6px hsl(var(--revival) / .5); }
+.glow-custom { box-shadow: 0 0 0 1px hsl(var(--custom) / .55), 0 0 18px -6px hsl(var(--custom) / .5); }
+
+@keyframes flash-in { from { background-color: hsl(var(--primary) / .18); } to { background-color: transparent; } }
+.flash-in { animation: flash-in 1.6s ease-out; }

@@ -1,0 +1,96 @@
+import type { PresetConfig, PresetKey, RevivalConfig, Timeframe, TimeframeConfig } from './types';
+import { TIMEFRAMES } from './types';
+
+export const PRESET_META: Record<PresetKey, { label: string; short: string; color: string }> = {
+  initial: { label: 'Initial', short: 'Inicial', color: 'initial' },
+  strong: { label: 'Strong', short: 'Forte', color: 'strong' },
+  explosive: { label: 'Explosive', short: 'Explosivo', color: 'explosive' },
+  revival: { label: 'Revival', short: 'Revival', color: 'revival' },
+};
+
+const base: TimeframeConfig = {
+  volRisePct: null,
+  mcapRisePct: null,
+  minVol: null,
+  maxVol: null,
+  minMcap: null,
+  maxMcap: null,
+  minChangePct: null,
+  maxChangePct: null,
+  minTxns: null,
+  maxTxns: null,
+  minLiq: null,
+  maxLiq: null,
+  minAgeH: null,
+  maxAgeH: null,
+  checkIntervalS: 30,
+  cooldownS: 300,
+  maxTokens: 3000,
+  noVolRemoveCycles: 10,
+  hiVolThreshold: 50000,
+  buySide: true,
+  sellSide: false,
+};
+
+// Volume mínimo escala com o tamanho da janela.
+const volScale: Record<Timeframe, number> = { '5m': 1, '1h': 6, '6h': 24, '24h': 60 };
+
+function tfSet(over: Partial<TimeframeConfig>): Record<Timeframe, TimeframeConfig> {
+  const out = {} as Record<Timeframe, TimeframeConfig>;
+  for (const tf of TIMEFRAMES) {
+    const o = { ...base, ...over };
+    if (o.minVol != null) o.minVol = o.minVol * volScale[tf];
+    out[tf] = o;
+  }
+  return out;
+}
+
+export const DEFAULT_REVIVAL: RevivalConfig = {
+  deadBaselineCeiling: 500,
+  spikeMultiplier: 20,
+  realVolumeFloor: 2000,
+  liquidityCeiling: 50000,
+  minPairAgeH: 24,
+  deadWindowMin: 60,
+  analysisWindowH: 24,
+  checkIntervalS: 30,
+  cooldownS: 300,
+};
+
+export function defaultPresets(): Record<PresetKey, PresetConfig> {
+  return {
+    initial: {
+      key: 'initial',
+      active: true,
+      timeframes: ['5m'],
+      tf: tfSet({ volRisePct: 50, mcapRisePct: 30, minVol: 10000, minMcap: 10000, maxMcap: 1_000_000 }),
+      soundId: 'builtin:initial',
+      volume: 0.7,
+    },
+    strong: {
+      key: 'strong',
+      active: true,
+      timeframes: ['5m'],
+      tf: tfSet({ volRisePct: 100, mcapRisePct: 100, minVol: 30000, minMcap: 25000, maxMcap: 500_000 }),
+      soundId: 'builtin:strong',
+      volume: 0.7,
+    },
+    explosive: {
+      key: 'explosive',
+      active: true,
+      timeframes: ['5m'],
+      tf: tfSet({ volRisePct: 200, mcapRisePct: 150, minVol: 50000, minMcap: 25000, maxMcap: 2_000_000 }),
+      soundId: 'builtin:explosive',
+      volume: 0.8,
+    },
+    revival: {
+      key: 'revival',
+      active: true,
+      timeframes: ['5m'],
+      tf: tfSet({}),
+      revival: { ...DEFAULT_REVIVAL },
+      soundId: 'builtin:revival',
+      volume: 0.7,
+    },
+  };
+}
