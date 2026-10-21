@@ -54,7 +54,14 @@ function AlertCardImpl({ a, now, isNew, favorite }: { a: Alert; now: number; isN
     else useUi.getState().set({ chartModal: { token: a.tokenAddress, pair: a.pairAddress, symbol: a.symbol, name: a.name, imageUrl: a.imageUrl } });
   };
   return (
-    <div className={cn('rounded-lg border bg-card p-3', presetBorder[a.preset], glow[a.preset], isNew && 'flash-in')}>
+    <div
+      onClick={(e) => {
+        // clique em qualquer parte do card abre o gráfico; botões e links mantêm a própria ação
+        if ((e.target as HTMLElement).closest('a,button')) return;
+        open();
+      }}
+      className={cn('rounded-lg border bg-card p-3', tokenKnown && 'cursor-pointer transition-colors hover:bg-raised/60', presetBorder[a.preset], glow[a.preset], isNew && 'flash-in')}
+    >
       <div className="flex flex-wrap items-center gap-1.5">
         <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
         <Dir size={14} className={a.direction === 'buy' ? 'text-up' : 'text-down'} />
