@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, Settings, Trophy, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, Radar, Settings, Trophy, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { cn } from '@/lib/cn';
 import { Popover, useNow } from './primitives';
@@ -27,6 +27,20 @@ const V2 = [
   { label: 'Snipe Desk', icon: Crosshair },
 ];
 
+function OperatorsLink() {
+  const unread = useStore((s) => s.operator.unread);
+  return (
+    <NavLink
+      to="/operadores"
+      className={({ isActive }) => cn('relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}
+    >
+      <Radar size={14} />
+      <span className="hidden sm:inline">Operadores</span>
+      {unread > 0 && <span className="num absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-down px-1 text-[9px] font-bold text-white">{unread > 99 ? '99+' : unread}</span>}
+    </NavLink>
+  );
+}
+
 export function TopNav() {
   return (
     <div className="flex h-11 items-center gap-3 border-b border-line bg-panel px-3 sm:px-4">
@@ -44,6 +58,7 @@ export function TopNav() {
             <span className="hidden sm:inline">{n.label}</span>
           </NavLink>
         ))}
+        <OperatorsLink />
         {V2.map((n) => (
           <span key={n.label} title="Fica para a versão 2" className="hidden cursor-not-allowed items-center gap-1.5 px-2 py-1 text-[12px] font-semibold text-dim md:flex">
             <n.icon size={14} />

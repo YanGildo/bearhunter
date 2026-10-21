@@ -3,6 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import Settings from './pages/Settings';
+import Operators from './pages/Operators';
+import { OperatorToaster } from './ui/OperatorToaster';
+import { operatorTracker } from './operators/tracker';
 import { StatusRow, TopNav } from './ui/Header';
 import { PresetBar } from './ui/PresetBar';
 import { ControlBar } from './ui/ControlBar';
@@ -28,11 +31,13 @@ function Shell() {
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/history" element={<History />} />
+        <Route path="/operadores" element={<Operators />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <PresetModal />
       <ChartModal />
+      <OperatorToaster />
       <Toaster />
     </div>
   );
@@ -41,7 +46,8 @@ function Shell() {
 export default function App() {
   useEffect(() => {
     // Coleta começa ao abrir o painel (como no projeto antigo). STOP pausa.
-    void collector.start();
+    operatorTracker.init();
+    void collector.start().then(() => operatorTracker.start());
     const unlock = () => unlockAudio();
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });

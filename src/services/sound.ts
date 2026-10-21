@@ -19,6 +19,20 @@ const BUILTINS: Record<string, { name: string; notes: Note[] }> = {
   },
   'builtin:revival': { name: 'Despertar laranja (Revival)', notes: [[392, 0, 0.18, 'triangle'], [523, 0.18, 0.18, 'triangle'], [784, 0.36, 0.3, 'triangle']] },
   'builtin:custom': { name: 'Toque roxo (My Alerts)', notes: [[740, 0, 0.1, 'square'], [740, 0.16, 0.1, 'square']] },
+  'builtin:drk': { name: 'DRK normal', notes: [[1046, 0, 0.09], [1318, 0.1, 0.12]] },
+  'builtin:drk-critical': { name: 'DRK critical', notes: [[880, 0, 0.1, 'triangle'], [1174, 0.11, 0.1, 'triangle'], [1568, 0.22, 0.18, 'triangle']] },
+  'builtin:drk-mega': {
+    name: 'DRK mega',
+    notes: [[1568, 0, 0.08, 'square'], [1046, 0.09, 0.08, 'square'], [1568, 0.18, 0.08, 'square'], [1046, 0.27, 0.08, 'square'], [2093, 0.36, 0.25, 'square']],
+  },
+  'builtin:operator': {
+    name: 'Operador (sinal)',
+    notes: [[330, 0, 0.14, 'sawtooth'], [494, 0.15, 0.14, 'sawtooth'], [659, 0.3, 0.22, 'sawtooth']],
+  },
+  'builtin:operator-dump': {
+    name: 'Operador (despejo)',
+    notes: [[880, 0, 0.12, 'sawtooth'], [440, 0.13, 0.12, 'sawtooth'], [880, 0.26, 0.12, 'sawtooth'], [440, 0.39, 0.25, 'sawtooth']],
+  },
 };
 
 let ctx: AudioContext | null = null;
@@ -37,9 +51,10 @@ export function unlockAudio() {
   audio();
 }
 
-function playSynth(notes: Note[], volume: number) {
+async function playSynth(notes: Note[], volume: number) {
   const c = audio();
   if (!c) return;
+  if (c.state !== 'running') await c.resume().catch(() => {});
   const t0 = c.currentTime + 0.01;
   for (const [f, s, d, type = 'sine'] of notes) {
     const o = c.createOscillator();

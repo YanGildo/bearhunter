@@ -10,6 +10,12 @@ export const PRESET_KEYS: PresetKey[] = ['initial', 'strong', 'explosive', 'revi
 
 export type Direction = 'buy' | 'sell';
 
+/** Indicador personalizado criado pelo usuário (ex.: "Indicadores DRK"). */
+export type IndicatorKey = `ind:${string}`;
+/** Qualquer origem de alerta: preset nativo, indicador personalizado, My Alert ou teste. */
+export type AlertSource = PresetKey | IndicatorKey | 'custom' | 'test';
+export type IndicatorColor = 'cyan' | 'pink' | 'lime';
+
 export interface WindowMetrics {
   volumeUsd: number | null;
   buys: number | null;
@@ -51,7 +57,8 @@ export type DiscoverySource =
   | 'pumpportal_migrated'
   | 'boosted'
   | 'profile'
-  | 'search';
+  | 'search'
+  | 'operator';
 
 export type TrackStatus = 'waiting' | 'active' | 'stale';
 
@@ -70,6 +77,7 @@ export interface TrackedToken {
   fetchAttempts: number;
   boostAmount: number | null;
   hot: boolean;
+  firstObservedMcap: number | null; // MCAP na primeira leitura (para o "PumpFun live")
 }
 
 export interface TimeframeConfig {
@@ -118,6 +126,25 @@ export interface PresetConfig {
   volume: number; // 0..1
 }
 
+export interface IndicatorConfig {
+  id: IndicatorKey;
+  name: string;
+  color: IndicatorColor;
+  active: boolean;
+  timeframes: Timeframe[];
+  tf: Record<Timeframe, TimeframeConfig>;
+  soundId: string | null;
+  volume: number;
+  /** Som por nível de subida do volume (como no painel do colega: normal/critical/mega). */
+  tiers: { criticalPct: number | null; megaPct: number | null; criticalSoundId: string | null; megaSoundId: string | null };
+  /** Tokens automáticos abaixo deste MCAP saem da lista (vazio = sem limite). */
+  minMcapToStay: number | null;
+  /** Alerta único quando um token novo passa deste volume total (24h). */
+  highVolNewCoin: { minTotalVol: number | null; maxAgeH: number };
+  /** Token novo da Pump.fun que entrou abaixo de `entryMcap` e passou de `alertMcap`. */
+  pumpLive: { entryMcap: number | null; alertMcap: number | null };
+}
+
 export interface Alert {
   id: string;
   dedupeKey: string;
@@ -126,7 +153,10 @@ export interface Alert {
   symbol: string | null;
   name: string | null;
   imageUrl: string | null;
-  preset: PresetKey | 'custom' | 'test';
+  preset: AlertSource;
+  presetName?: string; // nome do indicador no momento do alerta
+  presetColor?: IndicatorColor;
+  level?: 'normal' | 'critical' | 'mega';
   timeframe: Timeframe;
   direction: Direction;
   dexId: string | null;

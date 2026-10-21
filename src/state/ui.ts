@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PresetKey } from '@/domain/types';
+import type { IndicatorKey, PresetKey } from '@/domain/types';
 
 interface ChartTarget {
   token: string;
@@ -10,7 +10,7 @@ interface ChartTarget {
 }
 
 interface UiState {
-  presetModal: PresetKey | null;
+  presetModal: PresetKey | IndicatorKey | null;
   addTokenOpen: boolean;
   chartModal: ChartTarget | null;
   myAlertFor: string | null; // token para criar My Alert

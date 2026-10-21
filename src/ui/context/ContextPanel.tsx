@@ -10,7 +10,7 @@ import { axiomUrl, chartEmbedUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '
 import { ScamBadge, toggleScamWithToast } from '../ScamMark';
 import { Modal, Switch, toast, useNow } from '../primitives';
 import { TokenLogo } from '../TokenLogo';
-import { presetBg, presetText } from '../PresetBar';
+import { alertColor, presetBg, presetText } from '../PresetBar';
 import { presetLabel } from '../alerts/AlertsPanel';
 
 const REJECT_TEXT: Record<string, string> = {
@@ -151,7 +151,7 @@ function Panorama() {
               <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 font-bold">
-                  {a.symbol} <span className={cn('chip border-transparent', presetBg[a.isTest ? 'test' : a.preset], presetText[a.isTest ? 'test' : a.preset])}>{presetLabel(a)}</span>
+                  {a.symbol} <span className={cn('chip border-transparent', presetBg[alertColor(a)], presetText[alertColor(a)])}>{presetLabel(a)}</span>
                 </div>
                 <div className="num text-[10px] text-dim">{fmtDateTime(a.detectedAt)}</div>
               </div>
@@ -192,7 +192,7 @@ function TokenHistory({ token }: { token: string }) {
         <div className="label mb-1.5">Alertas deste token ({alerts.length})</div>
         {alerts.slice(0, 20).map((a) => (
           <div key={a.id} className="num border-b border-line py-1 text-[11px]">
-            <span className={cn('mr-2 font-bold', presetText[a.preset])}>{presetLabel(a)}</span>
+            <span className={cn('mr-2 font-bold', presetText[alertColor(a)])}>{presetLabel(a)}</span>
             <span className="text-dim">{fmtDateTime(a.detectedAt)}</span>
             <div className="text-fg/80">{a.summary}</div>
           </div>

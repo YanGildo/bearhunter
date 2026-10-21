@@ -5,6 +5,7 @@
 import { median, pctChange } from './num';
 import type {
   Direction,
+  IndicatorKey,
   MarketObservation,
   PresetKey,
   RevivalConfig,
@@ -13,7 +14,7 @@ import type {
 } from './types';
 
 export interface Candidate {
-  preset: PresetKey;
+  preset: PresetKey | IndicatorKey;
   timeframe: Timeframe;
   direction: Direction;
   volumeUsd: number | null;
@@ -75,7 +76,7 @@ function inRange(v: number | null, min: number | null, max: number | null, name:
 }
 
 export function evaluateTimeframe(
-  preset: PresetKey,
+  preset: PresetKey | IndicatorKey,
   tf: Timeframe,
   cfg: TimeframeConfig,
   current: MarketObservation,
@@ -280,4 +281,12 @@ export function evaluateRevival(
 
 export function dedupeKey(token: string, pair: string | null, preset: string, tf: Timeframe, dir: Direction): string {
   return `${token}|${pair ?? '-'}|${preset}|${tf}|${dir}`;
+}
+
+/** Nível do som pela subida de volume (normal < critical < mega). */
+export function soundLevel(volRisePct: number | null, criticalPct: number | null, megaPct: number | null): 'normal' | 'critical' | 'mega' {
+  if (volRisePct == null) return 'normal';
+  if (megaPct != null && volRisePct >= megaPct) return 'mega';
+  if (criticalPct != null && volRisePct >= criticalPct) return 'critical';
+  return 'normal';
 }

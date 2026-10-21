@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Alert, MyAlert, PresetConfig, PresetKey, Timeframe, TrackedToken } from '@/domain/types';
-import { defaultPresets } from '@/domain/presets';
+import type { Alert, IndicatorConfig, IndicatorKey, MyAlert, PresetConfig, PresetKey, Timeframe, TrackedToken } from '@/domain/types';
+import type { OperatorState } from '@/operators/types';
+import { EMPTY_OPERATOR_STATE } from '@/operators/types';
+import { defaultIndicator, defaultPresets } from '@/domain/presets';
 import type { SourceHealth } from '@/adapters/types';
 import { DEXSCREENER_DEFAULT_BASE } from '@/adapters/dexscreener/client';
 
 export type SortKey = 'vol' | 'mcap' | 'liq' | 'peak';
 export type WatchTab = 'geral' | 'favoritos' | string; // string = id da pasta
-export type AlertFilter = 'all' | PresetKey | 'custom';
+export type AlertFilter = 'all' | PresetKey | IndicatorKey | 'custom';
 
 export interface Folder {
   id: string;
@@ -40,6 +42,7 @@ export interface Prefs {
   discoverTrending: boolean;
   newTokenMinutes: number; // quanto tempo um token novo sem volume fica na lista
   debug: boolean;
+  rpcUrl: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -61,6 +64,7 @@ export const DEFAULT_PREFS: Prefs = {
   discoverTrending: true,
   newTokenMinutes: 10,
   debug: false,
+  rpcUrl: 'https://api.mainnet-beta.solana.com',
 };
 
 interface State {
@@ -77,6 +81,8 @@ interface State {
 
   // persistido
   presets: Record<PresetKey, PresetConfig>;
+  indicators: IndicatorConfig[];
+  operator: OperatorState;
   prefs: Prefs;
   favorites: string[];
   scams: Record<string, number>; // token → quando foi marcado como scam
@@ -109,6 +115,8 @@ export const useStore = create<State>()(
       newAlertIds: new Set(),
 
       presets: defaultPresets(),
+      indicators: [defaultIndicator()],
+      operator: EMPTY_OPERATOR_STATE,
       prefs: DEFAULT_PREFS,
       favorites: [],
       scams: {},
@@ -145,6 +153,8 @@ export const useStore = create<State>()(
       }),
       partialize: (s) => ({
         presets: s.presets,
+        indicators: s.indicators,
+        operator: { ...s.operator, signals: s.operator.signals.slice(0, 300), unread: s.operator.unread },
         prefs: s.prefs,
         favorites: s.favorites,
         scams: s.scams,
@@ -163,7 +173,14 @@ export const useStore = create<State>()(
           const saved = p.presets?.[k];
           if (saved) presets[k] = { ...defaults[k], ...saved, tf: { ...defaults[k].tf, ...saved.tf } };
         }
-        return { ...current, ...p, presets, prefs: { ...DEFAULT_PREFS, ...(p.prefs ?? {}) } };
+        return {
+          ...current,
+          ...p,
+          presets,
+          indicators: Array.isArray(p.indicators) ? p.indicators : current.indicators,
+          operator: { ...EMPTY_OPERATOR_STATE, ...(p.operator ?? {}), settings: { ...EMPTY_OPERATOR_STATE.settings, ...(p.operator?.settings ?? {}) } },
+          prefs: { ...DEFAULT_PREFS, ...(p.prefs ?? {}) },
+        };
       },
     },
   ),

@@ -3,14 +3,16 @@
 import { DexScreenerAdapter } from '@/adapters/dexscreener/client';
 import { PumpPortalAdapter } from '@/adapters/pumpportal/stream';
 import type { DiscoveredToken, MarketFetchResult } from '@/adapters/types';
-import { dedupeKey, evaluateRevival, evaluateTimeframe, type Candidate } from '@/domain/engine';
+import { dedupeKey, evaluateRevival, evaluateTimeframe, soundLevel, type Candidate } from '@/domain/engine';
 import { fmtUsd } from '@/domain/num';
 import { PRESET_META } from '@/domain/presets';
-import type { Alert, DiscoverySource, MarketObservation, MyAlert, PresetKey, TokenMeta, TrackedToken } from '@/domain/types';
+import type { Alert, DiscoverySource, IndicatorConfig, MarketObservation, MyAlert, PresetKey, TimeframeConfig, TokenMeta, TrackedToken } from '@/domain/types';
 import { PRESET_KEYS } from '@/domain/types';
 import { getState, useStore } from '@/state/store';
 import { store as db } from '@/storage/db';
 import { playSound } from '@/services/sound';
+import { onTick } from '@/services/clock';
+import { operatorHooks } from '@/operators/hooks';
 
 const SOLANA_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const BLUE_CHIPS = new Set(['SOL', 'WSOL', 'USDC', 'USDT', 'WETH', 'ETH', 'WBTC', 'BTC', 'CBBTC', 'JITOSOL', 'MSOL', 'BSOL', 'USD1', 'PYUSD', 'EURC', 'USDS']);
@@ -45,8 +47,8 @@ class Collector {
   private inflight = new Set<string>();
   private batches = 0;
   private pendingSnapshots: MarketObservation[] = [];
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private tickTimer: (() => void) | null = null;
+  private tickCount = 0;
   private lastTrendingAt = 0;
   private lastErrorFeedAt = 0;
   private booted: Promise<void> | null = null;
@@ -61,7 +63,7 @@ class Collector {
   private async doBoot() {
     const s = getState();
     const tokens: Record<string, TrackedToken> = {};
-    for (const t of s.savedTokens) tokens[t.address] = { ...t, lastObservation: null, lastFetchAt: null, status: 'waiting', zeroVolCycles: 0, fetchAttempts: 0 };
+    for (const t of s.savedTokens) tokens[t.address] = { ...t, lastObservation: null, lastFetchAt: null, status: 'waiting', zeroVolCycles: 0, fetchAttempts: 0, firstObservedMcap: t.firstObservedMcap ?? null };
     const alerts = await db.recentAlerts(500);
     for (const a of alerts) {
       const prev = this.lastAlertAt.get(a.dedupeKey) ?? 0;
@@ -86,10 +88,12 @@ class Collector {
     await this.boot();
     if (getState().running) return;
     useStore.setState({ running: true });
-    const p = getState().prefs;
-    if (p.discoverNew || p.discoverMigrations) this.pp.start((t) => this.onDiscovered(t));
-    this.tickTimer = setInterval(() => this.tick(), 1000);
-    this.healthTimer = setInterval(() => this.syncHealth(), 2000);
+    if (this.wantsPumpPortal()) this.pp.start((t) => this.onDiscovered(t));
+    // relógio em Web Worker: continua batendo com a aba em segundo plano
+    this.tickTimer = onTick(() => {
+      this.tick();
+      if (++this.tickCount % 2 === 0) this.syncHealth();
+    });
     getState().pushFeed({ kind: 'info', text: 'Coleta iniciada' });
     this.tick();
     this.syncHealth();
@@ -98,9 +102,8 @@ class Collector {
   stop() {
     useStore.setState({ running: false });
     this.pp.stop();
-    if (this.tickTimer) clearInterval(this.tickTimer);
-    if (this.healthTimer) clearInterval(this.healthTimer);
-    this.tickTimer = this.healthTimer = null;
+    this.tickTimer?.();
+    this.tickTimer = null;
     void this.flushSnapshots();
     getState().pushFeed({ kind: 'info', text: 'Coleta pausada' });
     this.syncHealth();
@@ -109,14 +112,20 @@ class Collector {
   /** Reaplica as preferências de descoberta (liga/desliga o PumpPortal). */
   applyDiscoveryPrefs() {
     if (!getState().running) return;
-    const p = getState().prefs;
-    if (p.discoverNew || p.discoverMigrations) this.pp.start((t) => this.onDiscovered(t));
+    if (this.wantsPumpPortal()) this.pp.start((t) => this.onDiscovered(t));
     else this.pp.stop();
+  }
+
+  private wantsPumpPortal() {
+    const s = getState();
+    return s.prefs.discoverNew || s.prefs.discoverMigrations || (s.operator.settings.enabled && s.operator.settings.detectFastMigration);
   }
 
   private syncHealth() {
     const health = [this.pp.health(), this.ds.health()];
     if (!getState().prefs.discoverNew && !getState().prefs.discoverMigrations) health[0] = { ...health[0], state: 'off', detail: 'desligado em Configurações' };
+    const op = operatorHooks.health?.();
+    if (op) health.push(op);
     useStore.setState({ health });
   }
 
@@ -126,36 +135,42 @@ class Collector {
     return PRESET_KEYS.filter((k) => getState().presets[k].active);
   }
 
+  private activeIndicators(): IndicatorConfig[] {
+    return getState().indicators.filter((i) => i.active);
+  }
+
+  /** Configs de timeframe ativas (presets nativos, exceto Revival, + indicadores). */
+  private tfConfigs(): TimeframeConfig[] {
+    const ps = getState().presets;
+    const out: TimeframeConfig[] = [];
+    for (const k of this.activePresets()) if (k !== 'revival') for (const tf of ps[k].timeframes) out.push(ps[k].tf[tf]);
+    for (const ind of this.activeIndicators()) for (const tf of ind.timeframes) out.push(ind.tf[tf]);
+    return out;
+  }
+
   baseIntervalS(): number {
     const ps = getState().presets;
-    const vals: number[] = [];
-    for (const k of this.activePresets()) {
-      const p = ps[k];
-      if (k === 'revival') vals.push(p.revival?.checkIntervalS ?? 30);
-      else for (const tf of p.timeframes) vals.push(p.tf[tf].checkIntervalS);
-    }
+    const vals = this.tfConfigs().map((c) => c.checkIntervalS);
+    if (ps.revival.active) vals.push(ps.revival.revival?.checkIntervalS ?? 30);
     const v = vals.length ? Math.min(...vals) : 30;
     return Math.max(10, Math.min(300, v));
   }
 
   private maxTokens(): number {
-    const ps = getState().presets;
-    const vals = this.activePresets().flatMap((k) => (k === 'revival' ? [] : ps[k].timeframes.map((tf) => ps[k].tf[tf].maxTokens)));
+    const vals = this.tfConfigs().map((c) => c.maxTokens);
     return Math.max(50, Math.min(5000, vals.length ? Math.max(...vals) : 3000));
   }
 
   private noVolLimit(): number | null {
-    const ps = getState().presets;
-    const vals = this.activePresets()
-      .flatMap((k) => (k === 'revival' ? [] : ps[k].timeframes.map((tf) => ps[k].tf[tf].noVolRemoveCycles)))
+    const vals = this.tfConfigs()
+      .map((c) => c.noVolRemoveCycles)
       .filter((v): v is number => v != null && v > 0);
     return vals.length ? Math.max(...vals) : null;
   }
 
   private hiVolThreshold(): number | null {
-    const ps = getState().presets;
-    const vals = this.activePresets()
-      .flatMap((k) => (k === 'revival' ? [] : ps[k].timeframes.map((tf) => ps[k].tf[tf].hiVolThreshold)))
+    const vals = this.tfConfigs()
+      .map((c) => c.hiVolThreshold)
       .filter((v): v is number => v != null && v > 0);
     return vals.length ? Math.min(...vals) : null;
   }
@@ -166,7 +181,8 @@ class Collector {
       !!s.tokens[a]?.manual ||
       s.favorites.includes(a) ||
       s.folders.some((f) => f.tokens.includes(a)) ||
-      s.myAlerts.some((m) => m.tokenAddress === a && m.status === 'waiting')
+      s.myAlerts.some((m) => m.tokenAddress === a && m.status === 'waiting') ||
+      !!operatorHooks.isOperatorToken?.(a)
     );
   }
 
@@ -180,6 +196,8 @@ class Collector {
 
   private onDiscovered(d: DiscoveredToken) {
     const p = getState().prefs;
+    if (d.source === 'pumpportal_new') operatorHooks.onCreated?.(d.address, d.at);
+    if (d.source === 'pumpportal_migrated') operatorHooks.onMigration?.(d.address, d.at, d.symbol ?? getState().tokens[d.address]?.meta.symbol ?? null);
     if (d.source === 'pumpportal_new' && !p.discoverNew) return;
     if (d.source === 'pumpportal_migrated' && !p.discoverMigrations) return;
     const existing = getState().tokens[d.address];
@@ -231,6 +249,7 @@ class Collector {
       fetchAttempts: 0,
       boostAmount: d?.boostAmount ?? null,
       hot: false,
+      firstObservedMcap: null,
     };
     useStore.setState({ tokens });
     if (manual) this.syncSaved();
@@ -409,6 +428,10 @@ class Collector {
     const noVolLimit = this.noVolLimit();
     const hiVol = this.hiVolThreshold();
     const newMin = s.prefs.newTokenMinutes * 60_000;
+    const stayVals = this.activeIndicators()
+      .map((i) => i.minMcapToStay)
+      .filter((v): v is number => v != null && v > 0);
+    const minMcapToStay = stayVals.length ? Math.min(...stayVals) : null;
 
     for (const o of res.observations) {
       const t = tokens[o.tokenAddress];
@@ -432,6 +455,7 @@ class Collector {
         observedPeakMcap: peakUp ? mcap : t.observedPeakMcap,
         observedPeakAt: peakUp ? now : t.observedPeakAt,
         hot: hiVol != null && v5 != null && v5 >= hiVol,
+        firstObservedMcap: t.firstObservedMcap ?? mcap,
       };
       const prot = this.isProtected(t.address);
       if (!prot) {
@@ -439,7 +463,10 @@ class Collector {
         const tooBig = mcap != null && mcap >= MAX_AUTO_MCAP;
         const deadNew = t.discovery === 'pumpportal_new' && now - t.addedAt > newMin && (v5 ?? 0) < 1000;
         const noVol = noVolLimit != null && next.zeroVolCycles >= noVolLimit;
-        if (BLUE_CHIPS.has(sym) || tooBig || deadNew || noVol) {
+        // MCAP mínimo para continuar monitorado (indicadores); tokens novos têm o tempo de vida próprio
+        const isFresh = t.discovery === 'pumpportal_new' && now - t.addedAt <= newMin;
+        const belowStay = minMcapToStay != null && mcap != null && mcap < minMcapToStay && !isFresh;
+        if (BLUE_CHIPS.has(sym) || tooBig || deadNew || noVol || belowStay) {
           delete tokens[t.address];
           removed.push(t.address);
           continue;
@@ -448,6 +475,11 @@ class Collector {
       tokens[t.address] = next;
       this.evaluate(next, o, prevHist, now);
       this.checkMyAlerts(next, o);
+      try {
+        operatorHooks.onObservation?.(next, o, prevHist);
+      } catch (e) {
+        console.warn('[operators]', e);
+      }
       this.pushHistory(t.address, o);
       if (now - (this.lastPersistAt.get(t.address) ?? 0) >= SNAPSHOT_PERSIST_MS) {
         this.lastPersistAt.set(t.address, now);
@@ -504,6 +536,18 @@ class Collector {
         for (const c of r.candidates) this.emit(t, o, c, cfg.cooldownS);
       }
     }
+    for (const ind of this.activeIndicators()) {
+      for (const tf of ind.timeframes) {
+        const cfg = ind.tf[tf];
+        const ek = `${t.address}|${ind.id}|${tf}`;
+        if (now - (this.lastEvalAt.get(ek) ?? 0) < cfg.checkIntervalS * 900) continue;
+        this.lastEvalAt.set(ek, now);
+        const r = evaluateTimeframe(ind.id, tf, cfg, o, hist, now);
+        debug[`${ind.name}:${tf}`] = r.candidates.length ? ['ok'] : r.rejects;
+        for (const c of r.candidates) this.emit(t, o, c, cfg.cooldownS, ind);
+      }
+      this.indicatorExtras(t, o, ind, now);
+    }
     if (Object.keys(debug).length) this.debug.set(t.address, { ...(this.debug.get(t.address) ?? {}), ...debug });
   }
 
@@ -512,12 +556,68 @@ class Collector {
     return this.debug.get(a);
   }
 
-  private emit(t: TrackedToken, o: MarketObservation, c: Candidate, cooldownS: number) {
+  /** Extras dos indicadores: "high vol new coin" e "PumpFun live" (alertas únicos por token). */
+  private indicatorExtras(t: TrackedToken, o: MarketObservation, ind: IndicatorConfig, now: number) {
+    const sym = t.meta.symbol ?? t.address.slice(0, 6);
+    const name = ind.name.toUpperCase();
+    const hv = ind.highVolNewCoin;
+    const v24 = o.windows['24h'].volumeUsd;
+    if (hv.minTotalVol != null && o.pairCreatedAt != null && now - o.pairCreatedAt <= hv.maxAgeH * 3600_000 && v24 != null && v24 >= hv.minTotalVol) {
+      this.emitExtra(t, o, ind, `${t.address}|${ind.id}|hvnc`, 86_400, `ALERTA ${name} — ${sym} HIGH VOL NEW COIN | Vol 24H ${fmtUsd(v24)}`, 'critical', v24);
+    }
+    const pl = ind.pumpLive;
+    const mcap = o.marketCapUsd;
+    const fromPump = t.discovery === 'pumpportal_new' || t.discovery === 'pumpportal_migrated' || o.dexId === 'pumpfun';
+    if (pl.alertMcap != null && fromPump && mcap != null && mcap >= pl.alertMcap && t.firstObservedMcap != null && (pl.entryMcap == null || t.firstObservedMcap <= pl.entryMcap)) {
+      this.emitExtra(t, o, ind, `${t.address}|${ind.id}|pumplive`, 86_400, `ALERTA ${name} — ${sym} PUMPFUN LIVE | entrou a ${fmtUsd(t.firstObservedMcap)} → MCAP ${fmtUsd(mcap)}`, 'mega', o.windows['5m'].volumeUsd);
+    }
+  }
+
+  private emitExtra(t: TrackedToken, o: MarketObservation, ind: IndicatorConfig, key: string, cooldownS: number, summary: string, level: 'normal' | 'critical' | 'mega', vol: number | null) {
+    const now = Date.now();
+    if (now - (this.lastAlertAt.get(key) ?? 0) < cooldownS * 1000) return;
+    this.lastAlertAt.set(key, now);
+    const w = o.windows['5m'];
+    this.publish({
+      id: uid(),
+      dedupeKey: key,
+      tokenAddress: t.address,
+      pairAddress: o.pairAddress,
+      symbol: t.meta.symbol,
+      name: t.meta.name,
+      imageUrl: t.meta.imageUrl,
+      preset: ind.id,
+      presetName: ind.name,
+      presetColor: ind.color,
+      level,
+      timeframe: key.endsWith('hvnc') ? '24h' : '5m',
+      direction: 'buy',
+      dexId: o.dexId,
+      detectedAt: now,
+      marketCapUsd: o.marketCapUsd,
+      volumeUsd: vol,
+      prevVolumeUsd: null,
+      volRisePct: null,
+      mcapRisePct: null,
+      priceChangePct: w.priceChangePct,
+      buys: w.buys,
+      sells: w.sells,
+      liquidityUsd: o.liquidityUsd,
+      pairCreatedAt: o.pairCreatedAt,
+      summary,
+      reasons: [summary],
+      warnings: [],
+      isTest: false,
+    });
+  }
+
+  private emit(t: TrackedToken, o: MarketObservation, c: Candidate, cooldownS: number, ind?: IndicatorConfig) {
     const now = Date.now();
     const key = dedupeKey(t.address, o.pairAddress, c.preset, c.timeframe, c.direction);
     if (now - (this.lastAlertAt.get(key) ?? 0) < cooldownS * 1000) return;
     this.lastAlertAt.set(key, now);
-    const label = PRESET_META[c.preset as PresetKey].short.toUpperCase();
+    const level = ind ? soundLevel(c.volRisePct, ind.tiers.criticalPct, ind.tiers.megaPct) : undefined;
+    const label = ind ? `${ind.name.toUpperCase()}${level && level !== 'normal' ? ` ${level.toUpperCase()}` : ''}` : PRESET_META[c.preset as PresetKey].short.toUpperCase();
     const sym = t.meta.symbol ?? t.address.slice(0, 6);
     const summary =
       c.preset === 'revival'
@@ -532,6 +632,9 @@ class Collector {
       name: t.meta.name,
       imageUrl: t.meta.imageUrl,
       preset: c.preset,
+      presetName: ind?.name,
+      presetColor: ind?.color,
+      level,
       timeframe: c.timeframe,
       direction: c.direction,
       dexId: o.dexId,
@@ -582,7 +685,10 @@ class Collector {
           const ma = s.myAlerts.find((m) => m.tokenAddress === alert.tokenAddress && m.status === 'triggered');
           void playSound(ma?.soundId ?? 'builtin:custom', 0.7);
         } else if (k === 'test') void playSound('builtin:initial', 0.7);
-        else void playSound(s.presets[k].soundId, s.presets[k].volume);
+        else if (k.startsWith('ind:')) {
+          const ind = s.indicators.find((i) => i.id === k);
+          if (ind) void playSound(this.indicatorSound(ind, alert.level), ind.volume);
+        } else void playSound(s.presets[k as PresetKey].soundId, s.presets[k as PresetKey].volume);
       }
     }
     if (s.prefs.notifEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -598,11 +704,18 @@ class Collector {
     }
   }
 
-  testAlert(preset: PresetKey) {
+  private indicatorSound(ind: IndicatorConfig, level?: 'normal' | 'critical' | 'mega') {
+    if (level === 'mega') return ind.tiers.megaSoundId ?? ind.soundId;
+    if (level === 'critical') return ind.tiers.criticalSoundId ?? ind.soundId;
+    return ind.soundId;
+  }
+
+  testAlert(preset: PresetKey | `ind:${string}`) {
     const s = getState();
     const sel = s.selected ? s.tokens[s.selected] : null;
     const o = sel?.lastObservation ?? null;
-    const label = PRESET_META[preset].label.toUpperCase();
+    const ind = preset.startsWith('ind:') ? s.indicators.find((i) => i.id === preset) : undefined;
+    const label = ind ? ind.name.toUpperCase() : PRESET_META[preset as PresetKey].label.toUpperCase();
     const sym = sel?.meta.symbol ?? 'TEST';
     const alert: Alert = {
       id: uid(),
@@ -612,7 +725,9 @@ class Collector {
       symbol: sym,
       name: sel?.meta.name ?? 'Alerta de teste',
       imageUrl: sel?.meta.imageUrl ?? null,
-      preset,
+      preset: preset as Alert['preset'],
+      presetName: ind?.name,
+      presetColor: ind?.color,
       timeframe: '5m',
       direction: 'buy',
       dexId: o?.dexId ?? null,
@@ -636,7 +751,10 @@ class Collector {
     ids.add(alert.id);
     useStore.setState({ alerts: [alert, ...s.alerts].slice(0, 500), newAlertIds: ids });
     void db.putAlert(alert);
-    if (!s.prefs.soundMuted) void playSound(s.presets[preset].soundId, s.presets[preset].volume);
+    if (!s.prefs.soundMuted) {
+      if (ind) void playSound(ind.soundId, ind.volume);
+      else void playSound(s.presets[preset as PresetKey].soundId, s.presets[preset as PresetKey].volume);
+    }
   }
 
   private checkMyAlerts(t: TrackedToken, o: MarketObservation) {

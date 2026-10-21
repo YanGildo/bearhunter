@@ -53,6 +53,36 @@ function pair(t) {
   return p;
 }
 
+// ---- RPC da Solana simulada (módulo Operadores) ----
+const MARKER = '8c3ssYCwFCyLv5yf11UF9FPznkS6i4VrNtRSNtmjifEe';
+const FARM = ['9f4E' + 'x'.repeat(36) + '8dN3', '6L5A' + 'y'.repeat(36) + 'wUbZ'];
+const OP_MINT = TOKENS[0].address; // MOON
+function rpcTx(sig) {
+  const bal = (owner, ui, idx) => ({ accountIndex: idx, mint: OP_MINT, owner, uiTokenAmount: { amount: String(Math.round(ui * 1e6)), decimals: 6 } });
+  return {
+    blockTime: Math.floor(Date.now() / 1000),
+    meta: { err: null, fee: 5000, preBalances: [1e9, 0], postBalances: [0.948e9, 0], preTokenBalances: [bal(MARKER, 0, 2)], postTokenBalances: [bal(MARKER, 1_500_000, 2)], logMessages: ['Program log: Instruction: Buy'] },
+    transaction: { signatures: [sig], message: { accountKeys: [{ pubkey: MARKER }, { pubkey: '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' }] } },
+  };
+}
+async function rpcRoute(route) {
+  const body = JSON.parse(route.request().postData() || '{}');
+  const ok = (result) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ jsonrpc: '2.0', id: body.id, result }) });
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST' } });
+  switch (body.method) {
+    case 'getSignaturesForAddress': return ok([]);
+    case 'getTransaction': return ok(rpcTx(body.params[0]));
+    case 'getTokenSupply': return ok({ value: { uiAmount: 1e9 } });
+    case 'getTokenLargestAccounts': return ok({ value: [{ address: 'TA1' + 'a'.repeat(40), uiAmount: 20e6 }, { address: 'TA2' + 'b'.repeat(40), uiAmount: 18e6 }, { address: 'TA3' + 'c'.repeat(40), uiAmount: 300e6 }] });
+    case 'getMultipleAccounts': {
+      const keys = body.params[0];
+      if (body.params[1]?.encoding === 'jsonParsed') return ok({ value: keys.map((k, i) => ({ data: { parsed: { info: { owner: i === 2 ? 'POOLpda' + 'p'.repeat(37) : FARM[i] } } } })) });
+      return ok({ value: keys.map((k) => (k.startsWith('POOL') ? { owner: 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA' } : { owner: '11111111111111111111111111111111' })) });
+    }
+    default: return ok(null);
+  }
+}
+
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
 const errors = [];
 async function setup(page) {
@@ -73,6 +103,24 @@ async function setup(page) {
     if (u.pathname.startsWith('/latest/dex/search')) return json({ pairs: TOKENS.slice(0, 2).map(pair) });
     return json([]);
   });
+  await page.route('https://api.mainnet-beta.solana.com/**', rpcRoute);
+  await page.route('https://api.mainnet-beta.solana.com', rpcRoute);
+  await page.routeWebSocket(/api\.mainnet-beta\.solana\.com/, (ws) => {
+    let n = 100;
+    ws.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      if (m.method === 'logsSubscribe') {
+        const sub = n++;
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id: m.id, result: sub }));
+        if (m.params[0].mentions[0] === MARKER) setTimeout(() => ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'logsNotification', params: { subscription: sub, result: { value: { signature: 'SIGBUY1', err: null, logs: ['Program log: Instruction: Buy'] } } } })), 6000);
+      }
+    });
+  });
+  await page.addInitScript(([marker]) => {
+    if (!localStorage.getItem('bearhunter:v1')) {
+      localStorage.setItem('bearhunter:v1', JSON.stringify({ state: { operator: { wallets: [{ address: marker, label: '8c3ss', role: 'marcador', active: true, addedAt: Date.now(), lastActivityAt: null, lastSignature: 'x' }], signals: [], tokens: {}, unread: 0 } }, version: 0 }));
+    }
+  }, [MARKER]);
   await page.routeWebSocket('wss://pumpportal.fun/api/data', (ws) => {
     ws.onMessage(() => ws.send(JSON.stringify({ message: 'Successfully subscribed' })));
     setTimeout(() => ws.send(JSON.stringify({ txType: 'create', mint: TOKENS[4].address, name: 'cope', symbol: 'COPE', signature: 'sig1', pool: 'pump' })), 1500);
@@ -111,7 +159,20 @@ await page.screenshot({ path: `${OUT}/04-preset-modal.png` });
 await page.getByRole('button', { name: /^Revival$/ }).last().click();
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${OUT}/05-preset-revival.png` });
+await page.getByRole('button', { name: /Indicadores DRK/ }).last().click();
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/05b-preset-drk.png`, fullPage: false });
 await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+const drkAlerts = await page.locator('text=/ALERTA INDICADORES DRK/').count();
+await page.goto(`http://localhost:${PORT}/operadores`);
+await page.waitForTimeout(9000);
+const entrada = await page.locator('text=ENTRADA').count();
+await page.locator('textarea').nth(1).fill(`https://gmgn.ai/sol/token/${TOKENS[0].address}\nhttps://gmgn.ai/sol/token/${TOKENS[1].address}`);
+await page.getByRole('button', { name: /Analisar/ }).click();
+await page.waitForTimeout(3000);
+const farmFound = await page.locator('text=/em 2 token/').count();
+await page.screenshot({ path: `${OUT}/08-operadores.png`, fullPage: true });
 
 const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const mp = await m.newPage();
@@ -124,7 +185,7 @@ await mp.goto(`http://localhost:${PORT}/settings?tab=fontes`);
 await mp.waitForTimeout(1500);
 await mp.screenshot({ path: `${OUT}/07-mobile-settings.png` });
 
-console.log(JSON.stringify({ alertsText, chartOk, chartSrc, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ alertsText, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);

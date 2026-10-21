@@ -52,6 +52,40 @@ Token "morto" que acorda. Usa só os parâmetros próprios:
 - **Liquidity Ceiling**, **Min Pair Age**, **Janela mínima morta**, **Janela de análise**.
 - Baseline = mediana do volume 5m que o bot observou (`src:snapshots`). Sem histórico suficiente, é estimado pelas janelas 1H/6H/24H do DexScreener (`src:windows_estimate`, `conf:low`).
 
+## Indicadores personalizados
+Além dos 4 presets, você pode criar até **3 indicadores** com nome e cor próprios (botão **+ Indicador** na barra de presets). O primeiro, **Indicadores DRK**, já vem com os parâmetros do painel de referência:
+
+| Campo | Padrão DRK |
+|---|---|
+| Vol Rise 5M / MCap Rise 5M | 50% / 50% |
+| Min Vol 5M / Min MCap / Max MCap | $500 / $10K / sem limite |
+| Check Interval / No Vol Remove | 30s / 10 ciclos |
+| Som Normal / Critical / Mega | acima do Vol Rise / +100% / +200% |
+| High vol new coin | alerta único quando token novo (até 24h) passa de $300K de volume |
+| PumpFun live | token da Pump.fun visto até $20K que passa de $100K |
+| MCAP mínimo para continuar monitorado | vazio (sem limite) |
+
+Os alertas do indicador aparecem no painel Alerts com o nome e a cor dele, e têm filtro próprio.
+
+## Operadores
+Aba separada para acompanhar um operador específico (quem lança tokens com o mesmo padrão). Nada aqui entra nos alertas de volume.
+
+**Carteiras** — cole endereços ou links do GMGN/Solscan e escolha o papel:
+- **Marcador**: compra logo no lançamento (ex.: 8c3ss compra ~0,05 SOL a ~$33K). Uma compra dela gera **ENTRADA**.
+- **Auxiliar**: opera junto em fases. Compra também gera **ENTRADA**.
+- **Fazenda**: acumula e despeja junto. Compras viram **FAZENDA** (1, 3, 5, 10 carteiras dentro); vendas de várias ao mesmo tempo viram **DESPEJO**.
+
+**Sinais**
+- **ENTRADA**, **FAZENDA**, **DESPEJO** (padrão: 3 carteiras da lista vendendo em até 10s), **TRANSFERÊNCIA** (carteira da lista enviando/recebendo ≥ 1% do supply — com botão para rastrear quem recebeu).
+- **Candidatos** (sem carteira envolvida, aparecem sem som por padrão): **MIGRAÇÃO RÁPIDA** (criado e migrado em até 6 min), **BUNDLE** (poucas compras grandes nos primeiros 3 min), **BOTS OFF/ON** (transações em 5m caem para 30% do pico ou voltam).
+
+**Descobrir fazenda** — cole links de vários tokens do operador e clique em Analisar. O bot busca os ~20 maiores holders de cada um pela RPC, ignora pools e bonding curve e mostra as carteiras que aparecem em mais de um token, para adicionar como Fazenda de uma vez.
+
+**Como funciona por dentro** — RPC pública da Solana (grátis): uma conexão WebSocket com uma assinatura por carteira (tempo real) e uma varredura de segurança a cada 90s. Até 150 carteiras. Se a RPC pública ficar lenta, cole em Ajustes a URL de um plano grátis da Helius ou QuickNode.
+
+## Aba em segundo plano
+O relógio do bot roda num Web Worker, então a coleta, os alertas e os sons continuam com a aba escondida. Se o som não tocar, clique uma vez na página depois de abrir (o navegador exige um clique para liberar áudio).
+
 ## My Alerts
 Alertas manuais por token (MCAP, Volume 5M, Variação 5M, Liquidez; maior/menor que). Roxo, badge CUSTOM, som próprio. Disparam uma vez; use "rearmar" para armar de novo.
 
@@ -66,4 +100,4 @@ Sons embutidos para cada preset e upload dos seus (mp3/wav/ogg/m4a) em Configura
 "PEAK" é o maior MCAP que o bot viu, não o ATH absoluto.
 
 ## Versão 2 (planejado)
-Ganhadores, Snipe Desk, Telegram, contas de usuário, coleta sempre ligada num servidor.
+Ganhadores, Snipe Desk, Telegram, contas de usuário, coleta sempre ligada num servidor (inclusive o rastreio de operadores).

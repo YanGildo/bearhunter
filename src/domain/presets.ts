@@ -1,4 +1,4 @@
-import type { PresetConfig, PresetKey, RevivalConfig, Timeframe, TimeframeConfig } from './types';
+import type { IndicatorColor, IndicatorConfig, IndicatorKey, PresetConfig, PresetKey, RevivalConfig, Timeframe, TimeframeConfig } from './types';
 import { TIMEFRAMES } from './types';
 
 export const PRESET_META: Record<PresetKey, { label: string; short: string; color: string }> = {
@@ -92,5 +92,32 @@ export function defaultPresets(): Record<PresetKey, PresetConfig> {
       soundId: 'builtin:revival',
       volume: 0.7,
     },
+  };
+}
+
+export const MAX_INDICATORS = 3;
+export const INDICATOR_COLORS: IndicatorColor[] = ['cyan', 'pink', 'lime'];
+
+/**
+ * Indicador personalizado com os parâmetros do painel de referência (DRK):
+ * vol 5m +50%, MCAP +50%, vol mínimo $500, MCAP mínimo $10K, sem MCAP máximo, 30s,
+ * remove após 10 ciclos sem volume, sons normal/critical(+100%)/mega(+200%),
+ * high vol new coin $300K, PumpFun live entrada $20K → alerta $100K.
+ */
+export function defaultIndicator(name = 'Indicadores DRK', color: IndicatorColor = 'cyan'): IndicatorConfig {
+  const id = `ind:${Math.random().toString(36).slice(2, 8)}` as IndicatorKey;
+  return {
+    id,
+    name,
+    color,
+    active: true,
+    timeframes: ['5m'],
+    tf: tfSet({ volRisePct: 50, mcapRisePct: 50, minVol: 500, minMcap: 10000, maxMcap: null, checkIntervalS: 30, noVolRemoveCycles: 10, hiVolThreshold: null }),
+    soundId: 'builtin:drk',
+    volume: 0.8,
+    tiers: { criticalPct: 100, megaPct: 200, criticalSoundId: 'builtin:drk-critical', megaSoundId: 'builtin:drk-mega' },
+    minMcapToStay: null,
+    highVolNewCoin: { minTotalVol: 300000, maxAgeH: 24 },
+    pumpLive: { entryMcap: 20000, alertMcap: 100000 },
   };
 }

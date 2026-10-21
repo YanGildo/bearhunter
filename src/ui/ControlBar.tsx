@@ -175,6 +175,7 @@ export function ControlBar() {
   const setPrefs = useStore((s) => s.setPrefs);
   const last = useStore((s) => s.lastCycleAt);
   const selected = useStore((s) => s.selected);
+  const indicators = useStore((s) => s.indicators);
   const now = useNow(1000);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -245,6 +246,17 @@ export function ControlBar() {
               }}
             >
               Testar {PRESET_META[k].label}
+            </Menu.Item>
+          ))}
+          {indicators.map((i) => (
+            <Menu.Item
+              key={i.id}
+              onSelect={() => {
+                unlockAudio();
+                collector.testAlert(i.id);
+              }}
+            >
+              Testar {i.name}
             </Menu.Item>
           ))}
         </Menu.Content>

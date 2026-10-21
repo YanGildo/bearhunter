@@ -9,7 +9,7 @@ import { axiomUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
 import { ScamBadge, toggleScamWithToast } from '../ScamMark';
 import { TokenLogo } from '../TokenLogo';
 import { toast, useNow } from '../primitives';
-import { presetBg, presetBorder, presetText } from '../PresetBar';
+import { alertColor, INDICATOR_ICON, presetBg, presetBorder, presetText } from '../PresetBar';
 import { openToken } from '../ControlBar';
 import { useUi } from '@/state/ui';
 
@@ -28,6 +28,9 @@ const glow: Record<string, string> = {
   explosive: 'glow-explosive',
   revival: 'glow-revival',
   custom: 'glow-custom',
+  cyan: 'glow-cyan',
+  pink: 'glow-pink',
+  lime: 'glow-lime',
   test: '',
 };
 
@@ -41,11 +44,15 @@ const WARN_TEXT: Record<string, string> = {
 export function presetLabel(a: Alert) {
   if (a.preset === 'custom') return 'CUSTOM';
   if (a.preset === 'test') return 'TEST';
-  return PRESET_META[a.preset].short.toUpperCase();
+  if (a.preset.startsWith('ind:')) {
+    const lvl = a.level && a.level !== 'normal' ? ` ${a.level.toUpperCase()}` : '';
+    return `${(a.presetName ?? 'Indicador').toUpperCase()}${lvl}`;
+  }
+  return PRESET_META[a.preset as keyof typeof PRESET_META].short.toUpperCase();
 }
 
 function AlertCardImpl({ a, now, isNew, favorite, scam }: { a: Alert; now: number; isNew: boolean; favorite: boolean; scam: boolean }) {
-  const p = a.isTest ? 'test' : a.preset;
+  const p = alertColor(a);
   const tokenKnown = a.tokenAddress !== 'TEST';
   const isNovo = a.pairCreatedAt != null ? now - a.pairCreatedAt < 24 * 3600_000 : null;
   const Dir = a.direction === 'buy' ? TrendingUp : TrendingDown;
@@ -62,7 +69,7 @@ function AlertCardImpl({ a, now, isNew, favorite, scam }: { a: Alert; now: numbe
         open();
       }}
       className={cn('rounded-lg border bg-card p-3', tokenKnown && 'cursor-pointer transition-colors hover:bg-raised/60',
-        scam && 'bg-down/[0.06]', presetBorder[a.preset], glow[a.preset], isNew && 'flash-in')}
+        scam && 'bg-down/[0.06]', presetBorder[p], glow[p], isNew && 'flash-in')}
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
@@ -146,6 +153,7 @@ export function AlertsPanel() {
   const favorites = useStore((s) => s.favorites);
   const newIds = useStore((s) => s.newAlertIds);
   const scams = useStore((s) => s.scams);
+  const indicators = useStore((s) => s.indicators);
   const [q, setQ] = useState('');
   const now = useNow(10_000);
   const list = useMemo(() => {
@@ -163,7 +171,7 @@ export function AlertsPanel() {
           <Bell size={13} className="text-warn" /> Alerts ({alerts.length})
         </span>
         <div className="ml-auto flex flex-wrap gap-0.5">
-          {FILTERS.map((f) => (
+          {[...FILTERS.slice(0, 5), ...indicators.map((i) => ({ k: i.id as AlertFilter, l: i.name, icon: INDICATOR_ICON })), FILTERS[5]].map((f) => (
             <button
               key={f.k}
               onClick={() => useStore.setState({ alertFilter: f.k })}

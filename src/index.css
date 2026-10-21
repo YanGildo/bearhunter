@@ -19,6 +19,9 @@
   --explosive: 0 84% 60%;
   --revival: 32 95% 55%;
   --custom: 270 80% 68%;
+  --ind-cyan: 186 90% 50%;
+  --ind-pink: 326 85% 62%;
+  --ind-lime: 82 80% 52%;
   --warn: 45 95% 55%;
   color-scheme: dark;
 }
@@ -48,6 +51,9 @@ body {
 .glow-strong { box-shadow: 0 0 0 1px hsl(var(--strong) / .55), 0 0 18px -6px hsl(var(--strong) / .5); }
 .glow-explosive { box-shadow: 0 0 0 1px hsl(var(--explosive) / .55), 0 0 18px -6px hsl(var(--explosive) / .5); }
 .glow-revival { box-shadow: 0 0 0 1px hsl(var(--revival) / .55), 0 0 18px -6px hsl(var(--revival) / .5); }
+.glow-cyan { box-shadow: 0 0 0 1px hsl(var(--ind-cyan) / .55), 0 0 18px -6px hsl(var(--ind-cyan) / .5); }
+.glow-pink { box-shadow: 0 0 0 1px hsl(var(--ind-pink) / .55), 0 0 18px -6px hsl(var(--ind-pink) / .5); }
+.glow-lime { box-shadow: 0 0 0 1px hsl(var(--ind-lime) / .55), 0 0 18px -6px hsl(var(--ind-lime) / .5); }
 .glow-custom { box-shadow: 0 0 0 1px hsl(var(--custom) / .55), 0 0 18px -6px hsl(var(--custom) / .5); }
 
 @keyframes flash-in { from { background-color: hsl(var(--primary) / .18); } to { background-color: transparent; } }

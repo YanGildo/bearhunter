@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Check, Save, TrendingDown, TrendingUp, Volume2, X, HelpCircle } from 'lucide-react';
+import { Check, Save, TrendingDown, TrendingUp, Volume2, X, HelpCircle, Trash2 } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { useUi } from '@/state/ui';
 import { Modal } from './primitives';
-import { PRESET_KEYS, TIMEFRAMES, type PresetConfig, type PresetKey, type RevivalConfig, type Timeframe, type TimeframeConfig } from '@/domain/types';
-import { PRESET_META, DEFAULT_REVIVAL } from '@/domain/presets';
-import { PRESET_ICON, presetBg, presetBorder, presetText } from './PresetBar';
+import { PRESET_KEYS, TIMEFRAMES, type IndicatorColor, type IndicatorConfig, type PresetConfig, type PresetKey, type RevivalConfig, type Timeframe, type TimeframeConfig } from '@/domain/types';
+import { PRESET_META, DEFAULT_REVIVAL, INDICATOR_COLORS } from '@/domain/presets';
+import { INDICATOR_ICON, PRESET_ICON, presetBg, presetBorder, presetText, solidBg } from './PresetBar';
 import { cn } from '@/lib/cn';
 import { allSounds, playSound, unlockAudio, type SoundOption } from '@/services/sound';
 
 const TFL: Record<Timeframe, string> = { '5m': '5M', '1h': '1H', '6h': '6H', '24h': '24H' };
-const checkBg: Record<PresetKey, string> = { initial: 'bg-initial', strong: 'bg-strong', explosive: 'bg-explosive', revival: 'bg-revival' };
 
 /** Campo numérico: vazio = null (nunca vira zero). */
 function NumField({
@@ -157,17 +156,64 @@ function RevivalEditor({ cfg, set }: { cfg: RevivalConfig; set: (c: RevivalConfi
   );
 }
 
+function SoundSelect({ value, onChange, sounds, label }: { value: string | null; onChange: (v: string | null) => void; sounds: SoundOption[]; label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-[5px]">
+      <span className="text-[12px] text-fg/85">{label}</span>
+      <select className="input h-8 w-52 max-w-[60%]" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">Mesmo som principal</option>
+        {sounds.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function IndicatorExtras({ ind, set, sounds }: { ind: IndicatorConfig; set: (i: IndicatorConfig) => void; sounds: SoundOption[] }) {
+  return (
+    <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
+      <Section title="Níveis de som (pela subida do volume)">
+        <p className="mb-1 text-[11px] text-dim">Normal = acima do Vol Rise. Critical e Mega tocam sons diferentes quando a subida passa destes valores.</p>
+        <NumField label="Critical a partir de" unit="%" value={ind.tiers.criticalPct} onChange={(v) => set({ ...ind, tiers: { ...ind.tiers, criticalPct: v } })} />
+        <SoundSelect label="Som Critical" value={ind.tiers.criticalSoundId} onChange={(v) => set({ ...ind, tiers: { ...ind.tiers, criticalSoundId: v } })} sounds={sounds} />
+        <NumField label="Mega a partir de" unit="%" value={ind.tiers.megaPct} onChange={(v) => set({ ...ind, tiers: { ...ind.tiers, megaPct: v } })} />
+        <SoundSelect label="Som Mega" value={ind.tiers.megaSoundId} onChange={(v) => set({ ...ind, tiers: { ...ind.tiers, megaSoundId: v } })} sounds={sounds} />
+      </Section>
+      <div className="space-y-4">
+        <Section title="High vol new coin">
+          <NumField label="Volume total mínimo (24H)" unit="$" value={ind.highVolNewCoin.minTotalVol} onChange={(v) => set({ ...ind, highVolNewCoin: { ...ind.highVolNewCoin, minTotalVol: v } })} help="Alerta único quando um token novo passa deste volume total. Vazio = desligado." />
+          <NumField label="Token novo = até" unit="h" required value={ind.highVolNewCoin.maxAgeH} onChange={(v) => set({ ...ind, highVolNewCoin: { ...ind.highVolNewCoin, maxAgeH: Math.max(1, v ?? 24) } })} />
+        </Section>
+        <Section title="PumpFun live">
+          <NumField label="Entrada (visto até)" unit="$" value={ind.pumpLive.entryMcap} onChange={(v) => set({ ...ind, pumpLive: { ...ind.pumpLive, entryMcap: v } })} help="Só tokens da Pump.fun que o bot viu pela primeira vez com MCAP até este valor." />
+          <NumField label="Alerta quando passar de" unit="$" value={ind.pumpLive.alertMcap} onChange={(v) => set({ ...ind, pumpLive: { ...ind.pumpLive, alertMcap: v } })} help="Alerta único quando esse token passa deste MCAP. Vazio = desligado." />
+        </Section>
+        <Section title="Lista">
+          <NumField label="MCAP mínimo para continuar monitorado" unit="$" value={ind.minMcapToStay} onChange={(v) => set({ ...ind, minMcapToStay: v })} help="Tokens automáticos abaixo deste MCAP saem da lista. Manuais e favoritos nunca saem. Vazio = sem limite." />
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+type TabKey = PresetKey | `ind:${string}`;
+
 export function PresetModal() {
   const open = useUi((s) => s.presetModal);
   const presets = useStore((s) => s.presets);
   const [draft, setDraft] = useState<Record<PresetKey, PresetConfig>>(presets);
-  const [tab, setTab] = useState<PresetKey>('initial');
-  const [editTf, setEditTf] = useState<Record<PresetKey, Timeframe>>({ initial: '5m', strong: '5m', explosive: '5m', revival: '5m' });
+  const [draftInd, setDraftInd] = useState<IndicatorConfig[]>([]);
+  const [tab, setTab] = useState<TabKey>('initial');
+  const [editTf, setEditTf] = useState<Record<string, Timeframe>>({});
   const [sounds, setSounds] = useState<SoundOption[]>([]);
 
   useEffect(() => {
     if (open) {
       setDraft(structuredClone(useStore.getState().presets));
+      setDraftInd(structuredClone(useStore.getState().indicators));
       setTab(open);
       void allSounds().then(setSounds);
     }
@@ -175,12 +221,24 @@ export function PresetModal() {
 
   const close = () => useUi.getState().set({ presetModal: null });
   const save = () => {
-    useStore.setState({ presets: draft });
+    useStore.setState({ presets: draft, indicators: draftInd });
     close();
   };
-  const p = draft[tab];
-  const set = (np: PresetConfig) => setDraft({ ...draft, [tab]: np });
-  const tf = editTf[tab];
+
+  const isInd = tab.startsWith('ind:');
+  const ind = isInd ? draftInd.find((i) => i.id === tab) : undefined;
+  const p = !isInd ? draft[tab as PresetKey] : undefined;
+  if (open && isInd && !ind && draftInd.length) setTab('initial');
+  const colorKey = ind ? ind.color : (tab as string);
+  const tf = editTf[tab] ?? '5m';
+  const setInd = (n: IndicatorConfig) => setDraftInd(draftInd.map((x) => (x.id === n.id ? n : x)));
+
+  // campos comuns (preset nativo ou indicador)
+  const common = ind ?? p!;
+  const setCommon = (patch: Partial<PresetConfig & IndicatorConfig>) => {
+    if (ind) setInd({ ...ind, ...patch } as IndicatorConfig);
+    else if (p) setDraft({ ...draft, [tab]: { ...p, ...patch } as PresetConfig });
+  };
 
   return (
     <Modal
@@ -188,93 +246,127 @@ export function PresetModal() {
       onOpenChange={(o) => !o && close()}
       title="Preset configuration"
       footer={
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Volume2 size={15} className="text-muted" />
-            <select className="input h-8 w-64 max-w-full" value={p.soundId ?? ''} onChange={(e) => set({ ...p, soundId: e.target.value || null })}>
-              <option value="">Sem som</option>
-              {sounds.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <span className="text-[11px] text-muted">Vol:</span>
-            <input type="range" min={0} max={1} step={0.05} value={p.volume} onChange={(e) => set({ ...p, volume: Number(e.target.value) })} className="w-36 accent-[hsl(var(--primary))]" />
-            <span className="num w-9 text-[11px] text-muted">{Math.round(p.volume * 100)}%</span>
-            <button
-              className="btn border-warn/40 text-warn"
-              onClick={() => {
-                unlockAudio();
-                void playSound(p.soundId, p.volume);
-              }}
-            >
-              Test
-            </button>
+        common && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Volume2 size={15} className="text-muted" />
+              <select className="input h-8 w-64 max-w-full" value={common.soundId ?? ''} onChange={(e) => setCommon({ soundId: e.target.value || null })}>
+                <option value="">Sem som</option>
+                {sounds.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-muted">Vol:</span>
+              <input type="range" min={0} max={1} step={0.05} value={common.volume} onChange={(e) => setCommon({ volume: Number(e.target.value) })} className="w-36 accent-[hsl(var(--primary))]" />
+              <span className="num w-9 text-[11px] text-muted">{Math.round(common.volume * 100)}%</span>
+              <button
+                className="btn border-warn/40 text-warn"
+                onClick={() => {
+                  unlockAudio();
+                  void playSound(common.soundId, common.volume);
+                }}
+              >
+                Test
+              </button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn h-9 px-4" onClick={close}>
+                <X size={13} /> Cancel
+              </button>
+              <button className="btn h-9 border-up/60 bg-up/15 px-4 text-up" onClick={save}>
+                <Save size={13} /> Save
+              </button>
+            </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <button className="btn h-9 px-4" onClick={close}>
-              <X size={13} /> Cancel
-            </button>
-            <button className="btn h-9 border-up/60 bg-up/15 px-4 text-up" onClick={save}>
-              <Save size={13} /> Save
-            </button>
-          </div>
-        </div>
+        )
       }
     >
-      <div className="space-y-4 p-5">
-        <div className="flex flex-wrap gap-2">
-          {PRESET_KEYS.map((k) => {
-            const Icon = PRESET_ICON[k];
-            return (
+      {common && (
+        <div className="space-y-4 p-5">
+          <div className="flex flex-wrap gap-2">
+            {PRESET_KEYS.map((k) => {
+              const Icon = PRESET_ICON[k];
+              return (
+                <button
+                  key={k}
+                  onClick={() => setTab(k)}
+                  className={cn('flex h-9 items-center gap-1.5 rounded-md border px-3 text-[12px] font-bold uppercase tracking-wide', tab === k ? cn(presetBorder[k], presetBg[k], presetText[k]) : 'border-line bg-card text-muted')}
+                >
+                  <Icon size={14} /> {PRESET_META[k].label}
+                </button>
+              );
+            })}
+            {draftInd.map((i) => (
               <button
-                key={k}
-                onClick={() => setTab(k)}
-                className={cn('flex h-9 items-center gap-1.5 rounded-md border px-3 text-[12px] font-bold uppercase tracking-wide', tab === k ? cn(presetBorder[k], presetBg[k], presetText[k]) : 'border-line bg-card text-muted')}
+                key={i.id}
+                onClick={() => setTab(i.id)}
+                className={cn('flex h-9 max-w-[220px] items-center gap-1.5 rounded-md border px-3 text-[12px] font-bold uppercase tracking-wide', tab === i.id ? cn(presetBorder[i.color], presetBg[i.color], presetText[i.color]) : 'border-line bg-card text-muted')}
               >
-                <Icon size={14} /> {PRESET_META[k].label}
+                <INDICATOR_ICON size={14} /> <span className="truncate">{i.name}</span>
               </button>
-            );
-          })}
-          <label className="ml-auto flex items-center gap-2 text-[11px] text-muted">
-            <input type="checkbox" checked={p.active} onChange={(e) => set({ ...p, active: e.target.checked })} /> Preset ativo
-          </label>
-        </div>
+            ))}
+            <label className="ml-auto flex items-center gap-2 text-[11px] text-muted">
+              <input type="checkbox" checked={common.active} onChange={(e) => setCommon({ active: e.target.checked })} /> Ativo
+            </label>
+          </div>
 
-        {tab !== 'revival' ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold uppercase text-muted">Timeframes:</span>
-              {TIMEFRAMES.map((t) => {
-                const on = p.timeframes.includes(t);
-                return (
-                  <span key={t} className={cn('flex h-7 items-center overflow-hidden rounded-md border', editTf[tab] === t ? presetBorder[tab] : 'border-line')}>
-                    <button
-                      aria-label={`Monitorar ${TFL[t]}`}
-                      onClick={() => set({ ...p, timeframes: on ? p.timeframes.filter((x) => x !== t) : [...p.timeframes, t] })}
-                      className={cn('grid h-full w-6 place-items-center', on ? checkBg[tab] : 'bg-raised')}
-                    >
-                      {on && <Check size={12} strokeWidth={3} className="text-black" />}
-                    </button>
-                    <button onClick={() => setEditTf({ ...editTf, [tab]: t })} className={cn('num h-full px-2.5 text-[11px] font-bold', editTf[tab] === t ? cn(presetBg[tab], presetText[tab]) : 'text-muted')}>
-                      {TFL[t]}
-                    </button>
-                  </span>
-                );
-              })}
-              <span className="text-[10.5px] italic text-dim">(marque quais monitorar; clique no rótulo para editar a config daquele TF)</span>
+          {ind && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card p-3">
+              <span className="text-[11px] font-bold uppercase text-muted">Nome</span>
+              <input className="input h-8 w-56" value={ind.name} maxLength={28} onChange={(e) => setInd({ ...ind, name: e.target.value })} />
+              <span className="ml-2 text-[11px] font-bold uppercase text-muted">Cor</span>
+              {INDICATOR_COLORS.map((c: IndicatorColor) => (
+                <button key={c} aria-label={c} onClick={() => setInd({ ...ind, color: c })} className={cn('h-6 w-6 rounded-full border-2', solidBg[c], ind.color === c ? 'border-fg' : 'border-transparent opacity-60')} />
+              ))}
+              <button
+                className="btn ml-auto border-down/40 text-down"
+                onClick={() => {
+                  setDraftInd(draftInd.filter((x) => x.id !== ind.id));
+                  setTab('initial');
+                }}
+              >
+                <Trash2 size={13} /> Excluir indicador
+              </button>
             </div>
-            <div className="text-[11px] text-muted">
-              Editando <b className={presetText[tab]}>{TFL[tf]}</b>
-              {!p.timeframes.includes(tf) && <span className="text-warn"> — este timeframe não está marcado para monitorar</span>}
-            </div>
-            <TfEditor key={`${tab}-${tf}`} tf={tf} cfg={p.tf[tf]} set={(c) => set({ ...p, tf: { ...p.tf, [tf]: c } })} />
-          </>
-        ) : (
-          <RevivalEditor cfg={p.revival ?? DEFAULT_REVIVAL} set={(c) => set({ ...p, revival: c })} />
-        )}
-      </div>
+          )}
+
+          {tab !== 'revival' ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase text-muted">Timeframes:</span>
+                {TIMEFRAMES.map((t) => {
+                  const on = common.timeframes.includes(t);
+                  return (
+                    <span key={t} className={cn('flex h-7 items-center overflow-hidden rounded-md border', tf === t ? presetBorder[colorKey] : 'border-line')}>
+                      <button
+                        aria-label={`Monitorar ${TFL[t]}`}
+                        onClick={() => setCommon({ timeframes: on ? common.timeframes.filter((x) => x !== t) : [...common.timeframes, t] })}
+                        className={cn('grid h-full w-6 place-items-center', on ? solidBg[colorKey] : 'bg-raised')}
+                      >
+                        {on && <Check size={12} strokeWidth={3} className="text-black" />}
+                      </button>
+                      <button onClick={() => setEditTf({ ...editTf, [tab]: t })} className={cn('num h-full px-2.5 text-[11px] font-bold', tf === t ? cn(presetBg[colorKey], presetText[colorKey]) : 'text-muted')}>
+                        {TFL[t]}
+                      </button>
+                    </span>
+                  );
+                })}
+                <span className="text-[10.5px] italic text-dim">(marque quais monitorar; clique no rótulo para editar a config daquele TF)</span>
+              </div>
+              <div className="text-[11px] text-muted">
+                Editando <b className={presetText[colorKey]}>{TFL[tf]}</b>
+                {!common.timeframes.includes(tf) && <span className="text-warn"> — este timeframe não está marcado para monitorar</span>}
+              </div>
+              <TfEditor key={`${tab}-${tf}`} tf={tf} cfg={common.tf[tf]} set={(c) => setCommon({ tf: { ...common.tf, [tf]: c } })} />
+              {ind && <IndicatorExtras ind={ind} set={setInd} sounds={sounds} />}
+            </>
+          ) : (
+            <RevivalEditor cfg={p?.revival ?? DEFAULT_REVIVAL} set={(c) => setCommon({ revival: c })} />
+          )}
+        </div>
+      )}
     </Modal>
   );
 }
