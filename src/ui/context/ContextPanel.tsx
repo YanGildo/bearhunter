@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Copy, ExternalLink, LineChart, Maximize2, Search, Sparkles, X, Bell } from 'lucide-react';
+import { Clock, Copy, ExternalLink, LineChart, Maximize2, Search, Sparkles, X, Bell, Skull } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { useUi } from '@/state/ui';
 import { collector } from '@/collector/collector';
 import { fmtAge, fmtDateTime, fmtPct, fmtTime, fmtUsd, shortAddr } from '@/domain/num';
 import { cn } from '@/lib/cn';
-import { chartEmbedUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { axiomUrl, chartEmbedUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { ScamBadge, toggleScamWithToast } from '../ScamMark';
 import { Modal, Switch, toast, useNow } from '../primitives';
 import { TokenLogo } from '../TokenLogo';
 import { presetBg, presetText } from '../PresetBar';
@@ -56,6 +57,7 @@ export function ChartFrame({ token, pair }: { token: string; pair: string | null
 
 function TokenHeader({ token }: { token: string }) {
   const t = useStore((s) => s.tokens[token]);
+  const scam = useStore((s) => !!s.scams[token]);
   const pair = t?.lastObservation?.pairAddress ?? null;
   return (
     <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
@@ -63,6 +65,7 @@ function TokenHeader({ token }: { token: string }) {
       <span className="font-bold">${t?.meta.symbol ?? '—'}</span>
       <span className="min-w-0 truncate text-[11px] text-muted">{t?.meta.name}</span>
       <span className="num rounded bg-raised px-1.5 text-[10px] text-muted">{shortAddr(token)}</span>
+      {scam && <ScamBadge />}
       <div className="ml-auto flex items-center">
         <button className="btn-ghost" title="Copiar CA" onClick={() => void copyText(token).then(() => toast('CA copiado'))}>
           <Copy size={13} />
@@ -73,6 +76,12 @@ function TokenHeader({ token }: { token: string }) {
         <a className="btn-ghost text-[10px] font-bold" title="GMGN" href={gmgnUrl(token)} target="_blank" rel="noreferrer">
           GMGN
         </a>
+        <a className="btn-ghost text-[10px] font-bold" title="Axiom" href={axiomUrl(token, pair)} target="_blank" rel="noreferrer">
+          AXIOM
+        </a>
+        <button className={cn('btn-ghost', scam && 'text-down')} title={scam ? 'Remover marca de scam' : 'Marcar como scam'} onClick={() => toggleScamWithToast(token, t?.meta.symbol)}>
+          <Skull size={13} />
+        </button>
         <a className="btn-ghost" title="Buscar no X" href={xSearchUrl(token)} target="_blank" rel="noreferrer">
           <Search size={13} />
         </a>

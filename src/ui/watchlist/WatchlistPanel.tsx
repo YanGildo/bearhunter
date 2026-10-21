@@ -9,6 +9,7 @@ import { Modal, toast, useNow } from '../primitives';
 import { TokenCard } from './TokenCard';
 import { openToken } from '../ControlBar';
 import { MyAlertsPanel } from './MyAlertsPanel';
+import { toggleScamWithToast } from '../ScamMark';
 
 const SORTS: { k: SortKey; l: string }[] = [
   { k: 'vol', l: 'VOL' },
@@ -69,6 +70,7 @@ function Watchlist() {
   const prefs = useStore((s) => s.prefs);
   const setPrefs = useStore((s) => s.setPrefs);
   const favorites = useStore((s) => s.favorites);
+  const scams = useStore((s) => s.scams);
   const folders = useStore((s) => s.folders);
   const tab = useStore((s) => s.watchTab);
   const selected = useStore((s) => s.selected);
@@ -194,6 +196,7 @@ function Watchlist() {
             tf={prefs.watchTf}
             now={now}
             favorite={favorites.includes(a)}
+            scam={!!scams[a]}
             selected={selected === a}
             onOpen={openToken}
             onFavorite={(x) => useStore.getState().toggleFavorite(x)}
@@ -206,6 +209,7 @@ function Watchlist() {
               setPrefs({ leftTab: 'myalerts' });
             }}
             onFolder={(x) => setFolderFor(x)}
+            onScam={(x) => toggleScamWithToast(x, tokens[x]?.meta.symbol)}
           />
         ))}
         {visible.length > limit && (

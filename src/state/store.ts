@@ -25,6 +25,7 @@ export interface Prefs {
   dexLateral: boolean;
   notifEnabled: boolean;
   soundMuted: boolean;
+  muteScamSound: boolean;
   autoResortS: number; // 0 = off
   watchTf: Timeframe;
   sort: SortKey;
@@ -45,6 +46,7 @@ export const DEFAULT_PREFS: Prefs = {
   dexLateral: true,
   notifEnabled: false,
   soundMuted: false,
+  muteScamSound: true,
   autoResortS: 30,
   watchTf: '5m',
   sort: 'vol',
@@ -77,6 +79,7 @@ interface State {
   presets: Record<PresetKey, PresetConfig>;
   prefs: Prefs;
   favorites: string[];
+  scams: Record<string, number>; // token → quando foi marcado como scam
   folders: Folder[];
   watchTab: WatchTab;
   alertFilter: AlertFilter;
@@ -87,6 +90,7 @@ interface State {
   setPrefs: (p: Partial<Prefs>) => void;
   setPreset: (k: PresetKey, p: PresetConfig) => void;
   toggleFavorite: (a: string) => void;
+  toggleScam: (a: string) => void;
   select: (a: string | null) => void;
   pushFeed: (e: Omit<FeedEntry, 't'>) => void;
 }
@@ -107,6 +111,7 @@ export const useStore = create<State>()(
       presets: defaultPresets(),
       prefs: DEFAULT_PREFS,
       favorites: [],
+      scams: {},
       folders: [],
       watchTab: 'geral',
       alertFilter: 'all',
@@ -119,6 +124,12 @@ export const useStore = create<State>()(
       toggleFavorite: (a) => {
         const f = get().favorites;
         set({ favorites: f.includes(a) ? f.filter((x) => x !== a) : [...f, a] });
+      },
+      toggleScam: (a) => {
+        const sc = { ...get().scams };
+        if (sc[a]) delete sc[a];
+        else sc[a] = Date.now();
+        set({ scams: sc });
       },
       select: (a) => set({ selected: a }),
       pushFeed: (e) => set({ feed: [{ ...e, t: Date.now() }, ...get().feed].slice(0, 200) }),
@@ -136,6 +147,7 @@ export const useStore = create<State>()(
         presets: s.presets,
         prefs: s.prefs,
         favorites: s.favorites,
+        scams: s.scams,
         folders: s.folders,
         watchTab: s.watchTab,
         alertFilter: s.alertFilter,

@@ -90,6 +90,16 @@ await page.screenshot({ path: `${OUT}/01-desktop-start.png` });
 await page.waitForTimeout(68_000);
 const alertsText = await page.locator('text=/Alerts \\(\\d+\\)/').first().textContent();
 await page.screenshot({ path: `${OUT}/02-desktop-alerts.png` });
+// clique no fundo do card de alerta (texto do resumo, não um botão) deve abrir o gráfico
+await page.locator('text=/ALERTA INICIAL — MOON/').first().click();
+await page.waitForTimeout(800);
+const chartSrc = await page.locator('iframe[title="DexScreener chart"]').first().getAttribute('src').catch(() => null);
+const chartOk = !!chartSrc && chartSrc.includes('chartType=marketCap') && chartSrc.includes('interval=1');
+// marca de scam pelo card de alerta
+await page.getByRole('button', { name: /^Scam$/ }).first().click();
+await page.waitForTimeout(500);
+const scamBadges = await page.locator('text=SCAM').count();
+await page.screenshot({ path: `${OUT}/02b-alert-click-scam.png` });
 await page.locator('text=KIMCHI').first().click();
 await page.waitForTimeout(800);
 await page.getByRole('button', { name: /Histórico/ }).first().click();
@@ -114,7 +124,7 @@ await mp.goto(`http://localhost:${PORT}/settings?tab=fontes`);
 await mp.waitForTimeout(1500);
 await mp.screenshot({ path: `${OUT}/07-mobile-settings.png` });
 
-console.log(JSON.stringify({ alertsText, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ alertsText, chartOk, chartSrc, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);

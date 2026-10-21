@@ -1,11 +1,12 @@
 import { memo, useMemo, useState } from 'react';
-import { Bell, Copy, ExternalLink, LineChart, Search, Star, TrendingUp, TrendingDown, Zap, Flame, Crosshair, Eye, BellRing } from 'lucide-react';
+import { Bell, Copy, ExternalLink, LineChart, Search, Star, TrendingUp, TrendingDown, Zap, Flame, Crosshair, Eye, BellRing, Skull } from 'lucide-react';
 import { useStore, type AlertFilter } from '@/state/store';
 import type { Alert } from '@/domain/types';
 import { fmtAge, fmtDateTime, fmtUsd } from '@/domain/num';
 import { PRESET_META } from '@/domain/presets';
 import { cn } from '@/lib/cn';
-import { copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { axiomUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { ScamBadge, toggleScamWithToast } from '../ScamMark';
 import { TokenLogo } from '../TokenLogo';
 import { toast, useNow } from '../primitives';
 import { presetBg, presetBorder, presetText } from '../PresetBar';
@@ -43,7 +44,7 @@ export function presetLabel(a: Alert) {
   return PRESET_META[a.preset].short.toUpperCase();
 }
 
-function AlertCardImpl({ a, now, isNew, favorite }: { a: Alert; now: number; isNew: boolean; favorite: boolean }) {
+function AlertCardImpl({ a, now, isNew, favorite, scam }: { a: Alert; now: number; isNew: boolean; favorite: boolean; scam: boolean }) {
   const p = a.isTest ? 'test' : a.preset;
   const tokenKnown = a.tokenAddress !== 'TEST';
   const isNovo = a.pairCreatedAt != null ? now - a.pairCreatedAt < 24 * 3600_000 : null;
@@ -60,7 +61,8 @@ function AlertCardImpl({ a, now, isNew, favorite }: { a: Alert; now: number; isN
         if ((e.target as HTMLElement).closest('a,button')) return;
         open();
       }}
-      className={cn('rounded-lg border bg-card p-3', tokenKnown && 'cursor-pointer transition-colors hover:bg-raised/60', presetBorder[a.preset], glow[a.preset], isNew && 'flash-in')}
+      className={cn('rounded-lg border bg-card p-3', tokenKnown && 'cursor-pointer transition-colors hover:bg-raised/60',
+        scam && 'bg-down/[0.06]', presetBorder[a.preset], glow[a.preset], isNew && 'flash-in')}
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
@@ -75,6 +77,7 @@ function AlertCardImpl({ a, now, isNew, favorite }: { a: Alert; now: number; isN
         )}
         {isNovo != null && <span className={cn('chip border-line', isNovo ? 'text-initial' : 'text-muted')}>{isNovo ? 'NOVO' : 'ANTIGO'}</span>}
         {a.dexId === 'pumpfun' && <span className="chip border-initial/30 text-initial">curve</span>}
+        {scam && <ScamBadge />}
         {a.isTest && <span className="chip border-warn/50 bg-warn/15 text-warn">TEST</span>}
         <div className="ml-auto flex items-center gap-1.5">
           {tokenKnown && (
@@ -118,11 +121,17 @@ function AlertCardImpl({ a, now, isNew, favorite }: { a: Alert; now: number; isN
           <a className="flex items-center gap-1 text-up hover:underline" href={gmgnUrl(a.tokenAddress)} target="_blank" rel="noreferrer">
             <ExternalLink size={12} /> GMGN
           </a>
+          <a className="flex items-center gap-1 text-initial hover:underline" href={axiomUrl(a.tokenAddress, a.pairAddress)} target="_blank" rel="noreferrer">
+            <ExternalLink size={12} /> Axiom
+          </a>
           <a className="flex items-center gap-1 text-warn hover:underline" href={xSearchUrl(a.tokenAddress)} target="_blank" rel="noreferrer">
             <Search size={12} /> Search on X
           </a>
           <button className="flex items-center gap-1 text-muted hover:text-fg" onClick={() => void copyText(a.tokenAddress).then(() => toast('CA copiado'))}>
             <Copy size={12} /> Copy CA
+          </button>
+          <button className={cn('flex items-center gap-1 hover:underline', scam ? 'text-down' : 'text-muted hover:text-down')} onClick={() => toggleScamWithToast(a.tokenAddress, a.symbol)}>
+            <Skull size={12} /> {scam ? 'Desmarcar scam' : 'Scam'}
           </button>
         </div>
       )}
@@ -136,6 +145,7 @@ export function AlertsPanel() {
   const filter = useStore((s) => s.alertFilter);
   const favorites = useStore((s) => s.favorites);
   const newIds = useStore((s) => s.newAlertIds);
+  const scams = useStore((s) => s.scams);
   const [q, setQ] = useState('');
   const now = useNow(10_000);
   const list = useMemo(() => {
@@ -177,7 +187,7 @@ export function AlertsPanel() {
           </div>
         )}
         {list.slice(0, 200).map((a) => (
-          <AlertCard key={a.id} a={a} now={now} isNew={newIds.has(a.id)} favorite={favorites.includes(a.tokenAddress)} />
+          <AlertCard key={a.id} a={a} now={now} isNew={newIds.has(a.id)} favorite={favorites.includes(a.tokenAddress)} scam={!!scams[a.tokenAddress]} />
         ))}
       </div>
     </div>

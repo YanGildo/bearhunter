@@ -24,6 +24,7 @@ export default function History() {
   const [sort, setSort] = useState<'time' | 'mcap' | 'vol'>('time');
   const [page, setPage] = useState(0);
   const favorites = useStore((s) => s.favorites);
+  const scams = useStore((s) => s.scams);
   const now = useNow(30_000);
 
   // carregado sob demanda, só ao abrir a página
@@ -85,7 +86,7 @@ export default function History() {
         {all && !list.length && <div className="py-10 text-center text-[12px] text-dim">Nenhum alerta salvo{q || f !== 'all' ? ' com esses filtros' : ''}.</div>}
         <div className="grid gap-2.5 md:grid-cols-2">
           {list.slice(page * PAGE, (page + 1) * PAGE).map((a) => (
-            <AlertCard key={a.id} a={a} now={now} isNew={false} favorite={favorites.includes(a.tokenAddress)} />
+            <AlertCard key={a.id} a={a} now={now} isNew={false} favorite={favorites.includes(a.tokenAddress)} scam={!!scams[a.tokenAddress]} />
           ))}
         </div>
         {pages > 1 && (

@@ -21,6 +21,20 @@ const TABS = [
 type Tab = (typeof TABS)[number]['k'];
 const ACCEPT = '.mp3,.wav,.ogg,.m4a,audio/mpeg,audio/wav,audio/ogg,audio/mp4';
 
+function MuteScam() {
+  const v = useStore((s) => s.prefs.muteScamSound);
+  const setPrefs = useStore((s) => s.setPrefs);
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-line bg-card p-3">
+      <div>
+        <div className="text-[12px] font-semibold">Silenciar tokens marcados como SCAM</div>
+        <div className="text-[11px] text-muted">O alerta continua aparecendo com a marca SCAM, mas não toca som nem notificação.</div>
+      </div>
+      <Switch checked={v} onChange={(nv) => setPrefs({ muteScamSound: nv })} />
+    </div>
+  );
+}
+
 function Sounds() {
   const [list, setList] = useState<SoundOption[]>([]);
   const [queue, setQueue] = useState<{ name: string; status: string }[]>([]);
@@ -42,6 +56,7 @@ function Sounds() {
   return (
     <div className="space-y-4">
       <p className="text-[12px] text-muted">Os sons ficam salvos neste navegador. Escolha qual toca em cada preset no modal de configuração do preset.</p>
+      <MuteScam />
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn h-9" onClick={() => ref.current?.click()}>
           <Upload size={14} /> Enviar sons (mp3, wav, ogg, m4a)

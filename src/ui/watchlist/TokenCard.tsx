@@ -1,10 +1,11 @@
 import { memo } from 'react';
-import { Star, LineChart, Copy, ExternalLink, Search, Trash2, BellPlus, FolderPlus, Flame, Zap } from 'lucide-react';
+import { Star, LineChart, Copy, ExternalLink, Search, Trash2, BellPlus, FolderPlus, Flame, Zap, Skull } from 'lucide-react';
 import type { Timeframe, TrackedToken } from '@/domain/types';
 import { fmtAge, fmtInt, fmtPct, fmtUsd } from '@/domain/num';
 import { TokenLogo } from '../TokenLogo';
 import { cn } from '@/lib/cn';
-import { copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { axiomUrl, copyText, dexUrl, gmgnUrl, xSearchUrl } from '@/lib/links';
+import { ScamBadge } from '../ScamMark';
 import { toast } from '../primitives';
 
 const TF_LABEL: Record<Timeframe, string> = { '5m': '5M', '1h': '1H', '6h': '6H', '24h': '24H' };
@@ -23,15 +24,17 @@ interface Props {
   tf: Timeframe;
   now: number;
   favorite: boolean;
+  scam: boolean;
   selected: boolean;
   onOpen: (a: string) => void;
   onFavorite: (a: string) => void;
   onRemove: (a: string) => void;
   onMyAlert: (a: string) => void;
   onFolder: (a: string) => void;
+  onScam: (a: string) => void;
 }
 
-function CardImpl({ t, tf, now, favorite, selected, onOpen, onFavorite, onRemove, onMyAlert, onFolder }: Props) {
+function CardImpl({ t, tf, now, favorite, scam, selected, onOpen, onFavorite, onRemove, onMyAlert, onFolder, onScam }: Props) {
   const o = t.lastObservation;
   const w = o?.windows[tf];
   const change = w?.priceChangePct ?? null;
@@ -50,6 +53,7 @@ function CardImpl({ t, tf, now, favorite, selected, onOpen, onFavorite, onRemove
       onKeyDown={(e) => e.key === 'Enter' && onOpen(t.address)}
       className={cn(
         'group cursor-pointer border-b border-line px-3 py-2.5 transition-colors hover:bg-card',
+        scam && 'bg-down/[0.06] shadow-[inset_3px_0_0_hsl(var(--down))]',
         selected && 'bg-primary/[0.07] shadow-[inset_2px_0_0_hsl(var(--primary))]',
       )}
     >
@@ -59,6 +63,7 @@ function CardImpl({ t, tf, now, favorite, selected, onOpen, onFavorite, onRemove
         <span className="truncate text-[13px] font-bold">{t.meta.symbol ?? t.address.slice(0, 6)}</span>
         <span className="min-w-0 truncate text-[11px] text-muted">{t.meta.name ?? (t.status === 'waiting' ? 'aguardando dados…' : '')}</span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          {scam && <ScamBadge />}
           {t.manual && <span className="chip border-primary/40 text-primary">manual</span>}
           {isCurve && <span className="chip border-initial/40 text-initial" title="Ainda na bonding curve da Pump.fun">curve</span>}
           {t.hot && (
@@ -74,6 +79,9 @@ function CardImpl({ t, tf, now, favorite, selected, onOpen, onFavorite, onRemove
           <div className="hidden items-center group-hover:flex">
             <button className="btn-ghost px-1" title="Favorito" onClick={stop(() => onFavorite(t.address))}>
               <Star size={13} className={favorite ? 'fill-warn text-warn' : ''} />
+            </button>
+            <button className={cn('btn-ghost px-1', scam && 'text-down')} title={scam ? 'Remover marca de scam' : 'Marcar como scam'} onClick={stop(() => onScam(t.address))}>
+              <Skull size={13} />
             </button>
             <button className="btn-ghost px-1" title="Adicionar a pasta" onClick={stop(() => onFolder(t.address))}>
               <FolderPlus size={13} />
@@ -92,6 +100,9 @@ function CardImpl({ t, tf, now, favorite, selected, onOpen, onFavorite, onRemove
             </a>
             <a className="btn-ghost px-1 text-[11px] font-bold" title="GMGN" href={gmgnUrl(t.address)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
               G
+            </a>
+            <a className="btn-ghost px-1 text-[11px] font-bold" title="Axiom" href={axiomUrl(t.address, o?.pairAddress)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+              AX
             </a>
             <a className="btn-ghost px-1" title="Buscar no X" href={xSearchUrl(t.address)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
               <Search size={13} />

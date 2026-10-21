@@ -573,6 +573,7 @@ class Collector {
   private ring(alert: Alert) {
     const s = getState();
     const now = Date.now();
+    if (s.prefs.muteScamSound && s.scams[alert.tokenAddress]) return; // token marcado como scam: aparece, mas não toca
     if (!s.prefs.soundMuted) {
       const k = alert.preset;
       if (now - (this.soundAt.get(k) ?? 0) > 2000) {
