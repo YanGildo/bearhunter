@@ -1,6 +1,14 @@
 import { createClient, navigatorLock, NavigatorLockAcquireTimeoutError, type SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const directUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+/**
+ * No site publicado, o Supabase é acessado por /sb (proxy no Cloudflare, ver functions/sb/),
+ * porque algumas operadoras brasileiras bloqueiam *.supabase.co. Em localhost vai direto.
+ */
+const viaProxy = typeof window !== 'undefined' && !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+const url = directUrl && viaProxy ? `${window.location.origin}/sb` : directUrl;
+// mantém a mesma chave da sessão salva (senão todo mundo teria que entrar de novo)
+const storageKey = directUrl ? `sb-${new URL(directUrl).hostname.split('.')[0]}-auth-token` : undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
@@ -26,7 +34,7 @@ async function safeLock<R>(name: string, acquireTimeout: number, fn: () => Promi
 
 /** Sem as variáveis de ambiente o app roda em "modo local" (sem login), como na v1. */
 export const supabase: SupabaseClient | null =
-  url && key ? createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, lock: safeLock } }) : null;
+  url && key ? createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, lock: safeLock, storageKey } }) : null;
 export const AUTH_ENABLED = !!supabase;
 
 export interface Profile {
