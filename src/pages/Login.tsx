@@ -126,12 +126,17 @@ export function PendingPage({ blocked }: { blocked?: boolean }) {
   );
 }
 
-export function LoadingPage({ text = 'Carregando…' }: { text?: string }) {
+export function LoadingPage({ text = 'Carregando…', onRetry }: { text?: string; onRetry?: () => void }) {
   return (
-    <div className="grid h-full place-items-center bg-bg">
-      <div className="flex flex-col items-center gap-3">
+    <div className="grid h-full place-items-center bg-bg p-4">
+      <div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
         <BrandLogo />
         <div className="text-[12px] text-muted">{text}</div>
+        {onRetry && (
+          <button className="btn h-8" onClick={onRetry}>
+            <RefreshCw size={13} /> Tentar novamente
+          </button>
+        )}
       </div>
     </div>
   );

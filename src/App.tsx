@@ -68,13 +68,26 @@ export default function App() {
     void useAuth.getState().init();
   }, []);
   useEffect(() => {
-    if (status === 'active' && uid && !synced) void startCloudSync(uid).finally(() => setSynced(true));
+    if (status === 'active' && uid && !synced) {
+      // no máximo 10s esperando a nuvem; se demorar, abre com o que está neste navegador
+      const t = setTimeout(() => setSynced(true), 10000);
+      void startCloudSync(uid).finally(() => {
+        clearTimeout(t);
+        setSynced(true);
+      });
+    }
   }, [status, uid, synced]);
   if (status === 'loading') return <LoadingPage />;
   if (status === 'signedOut') return <LoginPage />;
   if (status === 'pending') return <PendingPage />;
   if (status === 'blocked') return <PendingPage blocked />;
-  if (status === 'error') return <LoadingPage text={`Erro ao carregar o perfil: ${error ?? ''}`} />;
+  if (status === 'error')
+    return (
+      <LoadingPage
+        text={`Não foi possível entrar: ${error ?? ''}. Se houver outra aba do BearHunter aberta, feche-a e tente de novo.`}
+        onRetry={() => void useAuth.getState().init()}
+      />
+    );
   if (!synced) return <LoadingPage text="Carregando suas configurações…" />;
   return (
     <BrowserRouter>

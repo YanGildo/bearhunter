@@ -27,6 +27,12 @@ const msg = (e: unknown) => {
 };
 
 let started = false;
+let listening = false;
+
+/** Não deixa uma chamada ao Supabase prender a tela de carregamento para sempre. */
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what} demorou demais (sem resposta do servidor de login)`)), ms))]);
+}
 
 export const useAuth = create<AuthState>()((set, get) => ({
   status: AUTH_ENABLED ? 'loading' : 'local',
@@ -37,15 +43,27 @@ export const useAuth = create<AuthState>()((set, get) => ({
   init: async () => {
     if (!supabase || started) return;
     started = true;
-    const { data } = await supabase.auth.getSession();
-    set({ session: data.session });
-    if (data.session) await get().refreshProfile();
-    else set({ status: 'signedOut' });
+    set({ status: 'loading', error: null });
+    try {
+      const { data } = await withTimeout(supabase.auth.getSession(), 15000, 'Restaurar a sessão');
+      set({ session: data.session });
+      if (data.session) await withTimeout(get().refreshProfile(), 15000, 'Carregar o perfil');
+      else set({ status: 'signedOut' });
+    } catch (e) {
+      started = false; // permite "Tentar novamente"
+      set({ status: 'error', error: msg(e) });
+    }
+    if (listening) return;
+    listening = true;
     supabase.auth.onAuthStateChange((_ev, session) => {
-      const prev = get().session?.user.id;
-      set({ session });
-      if (!session) set({ status: 'signedOut', profile: null });
-      else if (session.user.id !== prev) void get().refreshProfile();
+      // Recomendação do Supabase: nada de chamadas ao Supabase dentro deste callback
+      // (ele roda com a trava do login segura). Adia para fora dele.
+      setTimeout(() => {
+        const prev = get().session?.user.id;
+        set({ session });
+        if (!session) set({ status: 'signedOut', profile: null });
+        else if (session.user.id !== prev || get().status === 'error') void get().refreshProfile();
+      }, 0);
     });
   },
 
