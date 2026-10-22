@@ -1,4 +1,5 @@
 import type { DiscoveredToken, DiscoveryAdapter, SourceHealth } from '../types';
+import { proxyOrigin, Route, wsOrigin, type RouteMode } from '../route';
 
 export const PUMPPORTAL_WS = 'wss://pumpportal.fun/api/data';
 
@@ -108,6 +109,12 @@ export class PumpPortalAdapter implements DiscoveryAdapter {
     search: false,
   };
   private ws: WebSocket | null = null;
+  private onToken: ((t: DiscoveredToken) => void) | null = null;
+  private openTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly route: Route;
+  constructor(getMode: () => RouteMode = () => 'auto') {
+    this.route = new Route(getMode);
+  }
   private stopped = true;
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -129,27 +136,61 @@ export class PumpPortalAdapter implements DiscoveryAdapter {
   };
 
   health(): SourceHealth {
-    return { ...this.h, detail: this.h.state === 'ok' ? `${this.events} eventos nesta sessão` : this.h.detail };
+    const via = `rota ${this.route.label()}`;
+    return { ...this.h, detail: this.h.state === 'ok' ? `${this.events} eventos nesta sessão · ${via}` : this.h.detail ? `${this.h.detail} · ${via}` : via };
   }
 
   start(onToken: (t: DiscoveredToken) => void) {
     if (!this.stopped) return;
     this.stopped = false;
+    this.onToken = onToken;
     this.connect(onToken);
+  }
+
+  /** Botão "Reconectar agora": não espera a contagem; se estava falhando, tenta pela outra rota. */
+  reconnectNow() {
+    if (this.stopped || !this.onToken) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    if (this.h.state !== 'ok') this.route.flip();
+    this.retry = 0;
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
+    this.connect(this.onToken);
+  }
+
+  private url() {
+    const q = this.apiKey ? `?api-key=${encodeURIComponent(this.apiKey)}` : '';
+    const origin = proxyOrigin();
+    return this.route.pick() === 'proxy' && origin ? `${wsOrigin(origin)}/pp${q}` : `${PUMPPORTAL_WS}${q}`;
   }
 
   private connect(onToken: (t: DiscoveredToken) => void) {
     if (this.stopped) return;
-    this.h = { ...this.h, state: 'connecting' };
+    this.h = { ...this.h, state: 'connecting', detail: null };
     let ws: WebSocket;
     try {
-      ws = new WebSocket(this.apiKey ? `${PUMPPORTAL_WS}?api-key=${encodeURIComponent(this.apiKey)}` : PUMPPORTAL_WS);
+      ws = new WebSocket(this.url());
     } catch (e) {
       this.fail(String(e), onToken);
       return;
     }
     this.ws = ws;
+    // se não abrir em 10s, desiste desta tentativa (senão fica "connecting" para sempre)
+    let timedOut = false;
+    if (this.openTimer) clearTimeout(this.openTimer);
+    this.openTimer = setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        timedOut = true;
+        ws.close();
+      }
+    }, 10_000);
     ws.onopen = () => {
+      if (this.openTimer) clearTimeout(this.openTimer);
+      this.route.ok();
       this.retry = 0;
       this.h = { ...this.h, state: 'ok', lastSuccessAt: Date.now(), detail: null };
       ws.send(JSON.stringify({ method: 'subscribeNewToken' }));
@@ -174,25 +215,35 @@ export class PumpPortalAdapter implements DiscoveryAdapter {
       this.h.lastSuccessAt = Date.now();
       onToken(t);
     };
+    let opened = false;
+    ws.addEventListener('open', () => (opened = true));
     ws.onerror = () => {
-      this.h = { ...this.h, lastErrorAt: Date.now(), lastError: 'erro na conexão WebSocket' };
+      this.h = { ...this.h, lastErrorAt: Date.now() };
     };
-    ws.onclose = () => {
-      this.ws = null;
-      if (!this.stopped) this.fail(this.h.lastError ?? 'conexão fechada', onToken);
+    ws.onclose = (ev) => {
+      if (this.openTimer) clearTimeout(this.openTimer);
+      if (this.ws === ws) this.ws = null;
+      if (this.stopped) return;
+      const why = !opened
+        ? timedOut
+          ? 'sem resposta em 10s (a rede pode estar bloqueando o PumpPortal)'
+          : `não conectou (código ${ev.code}${ev.reason ? `: ${ev.reason}` : ''})${this.apiKey ? ' — confira a API key e o saldo da carteira PumpPortal' : ''}`
+        : `conexão caiu (código ${ev.code}${ev.reason ? `: ${ev.reason}` : ''})`;
+      this.fail(why, onToken);
     };
   }
 
   private fail(msg: string, onToken: (t: DiscoveredToken) => void) {
     // Backoff exponencial com jitter: 2s, 4s, 8s... até 60s.
-    const delay = Math.min(60_000, 2000 * 2 ** this.retry) * (0.8 + Math.random() * 0.4);
+    this.route.fail();
+    const delay = Math.min(30_000, 2000 * 2 ** this.retry) * (0.8 + Math.random() * 0.4);
     this.retry++;
     this.h = {
       ...this.h,
       state: 'degraded',
       lastErrorAt: Date.now(),
       lastError: msg,
-      detail: `reconectando em ${Math.round(delay / 1000)}s`,
+      detail: `reconectando em ${Math.round(delay / 1000)}s pela rota ${this.route.label()}`,
     };
     this.timer = setTimeout(() => this.connect(onToken), delay);
   }

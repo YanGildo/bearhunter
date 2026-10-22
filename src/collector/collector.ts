@@ -36,7 +36,7 @@ function emptyMeta(address: string, d?: Partial<DiscoveredToken>): TokenMeta {
 
 class Collector {
   readonly ds = new DexScreenerAdapter(() => getState().prefs.dsBaseUrl);
-  readonly pp = new PumpPortalAdapter();
+  readonly pp = new PumpPortalAdapter(() => getState().prefs.netRoute ?? 'auto');
   private history = new Map<string, MarketObservation[]>();
   private debug = new Map<string, Record<string, string[]>>();
   private lastAlertAt = new Map<string, number>();

@@ -2,6 +2,7 @@
 // (WebSocket logsSubscribe + varredura periódica de segurança) e gera sinais próprios.
 // Também recebe do coletor: criação/migração (PumpPortal) e observações (DexScreener).
 import { SolanaLogsSocket, SolanaRpc } from '@/adapters/solana-rpc/client';
+import { Route } from '@/adapters/route';
 import { BoundedSet } from '@/adapters/pumpportal/stream';
 import type { SourceHealth } from '@/adapters/types';
 import { collector } from '@/collector/collector';
@@ -35,7 +36,8 @@ export interface HolderRow {
 }
 
 class OperatorTracker {
-  readonly rpc = new SolanaRpc(() => getState().prefs.rpcUrl);
+  readonly route = new Route(() => getState().prefs.netRoute ?? 'auto');
+  readonly rpc = new SolanaRpc(() => getState().prefs.rpcUrl, this.route);
   private socketState: { state: SourceHealth['state']; detail: string | null } = { state: 'off', detail: null };
   private socket = new SolanaLogsSocket(
     () => getState().prefs.rpcUrl,
@@ -43,6 +45,7 @@ class OperatorTracker {
     (state, detail) => {
       this.socketState = { state, detail: detail ?? null };
     },
+    this.route,
   );
   private seen = new BoundedSet(8000);
   private queue: QueueItem[] = [];

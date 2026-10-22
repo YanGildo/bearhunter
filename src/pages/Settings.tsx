@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, Play, Trash2, Upload, PlugZap } from 'lucide-react';
+import { Download, Play, Trash2, Upload, PlugZap, RefreshCw } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { store as db } from '@/storage/db';
 import { allSounds, forgetSoundUrl, playSound, unlockAudio, type SoundOption } from '@/services/sound';
 import { collector } from '@/collector/collector';
+import { operatorTracker } from '@/operators/tracker';
 import { DEXSCREENER_DEFAULT_BASE } from '@/adapters/dexscreener/client';
 import { SourceRow } from '@/ui/Header';
 import { Switch, toast } from '@/ui/primitives';
@@ -141,6 +142,7 @@ function Sources() {
       <div className="grid gap-2 md:grid-cols-2">
         {health.length ? health.map((h) => <SourceRow key={h.id} h={h} />) : <div className="text-[12px] text-dim">Clique em START no Dashboard para ver o estado das fontes.</div>}
       </div>
+      <Connection />
       <div className="rounded-lg border border-line bg-card p-3">
         <div className="label mb-1">Descoberta de tokens</div>
         {row('PumpPortal — tokens novos', 'Canal gratuito subscribeNewToken. Cada token novo da Pump.fun entra na lista e sai sozinho se não ganhar tração.', prefs.discoverNew, 'discoverNew')}
@@ -175,6 +177,71 @@ function Sources() {
         </div>
         {testing && <div className={cn('text-[11px]', testing.startsWith('OK') ? 'text-up' : testing.startsWith('Falhou') ? 'text-down' : 'text-muted')}>{testing}</div>}
       </div>
+    </div>
+  );
+}
+
+function Connection() {
+  const route = useStore((s) => s.prefs.netRoute ?? 'auto');
+  const setPrefs = useStore((s) => s.setPrefs);
+  const [rpcMsg, setRpcMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const opts: { k: 'auto' | 'direct' | 'proxy'; l: string; d: string }[] = [
+    { k: 'auto', l: 'Automática', d: 'tenta direto; se falhar, usa o Cloudflare' },
+    { k: 'direct', l: 'Direta', d: 'sempre direto do seu navegador' },
+    { k: 'proxy', l: 'Via Cloudflare', d: 'sempre pelo bearhunter.pages.dev' },
+  ];
+  return (
+    <div className="space-y-3 rounded-lg border border-line bg-card p-3">
+      <div>
+        <div className="label">Conexão do PumpPortal e da Solana RPC</div>
+        <p className="mt-1 text-[11px] text-muted">
+          Algumas operadoras bloqueiam o PumpPortal e a RPC pública. Pela rota do Cloudflare, o seu navegador fala só com o bearhunter.pages.dev e o Cloudflare repassa. O DexScreener não precisa disso.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {opts.map((o) => (
+          <button
+            key={o.k}
+            title={o.d}
+            className={cn('tab h-8 px-3', route === o.k && 'tab-active')}
+            onClick={() => {
+              setPrefs({ netRoute: o.k });
+              setTimeout(() => collector.pp.reconnectNow(), 0);
+            }}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn h-8"
+          onClick={() => {
+            collector.pp.reconnectNow();
+            toast('Reconectando o PumpPortal…');
+          }}
+        >
+          <RefreshCw size={13} /> Reconectar PumpPortal agora
+        </button>
+        <button
+          className="btn h-8"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setRpcMsg(null);
+            const r = await operatorTracker.rpc.test();
+            setRpcMsg(r);
+            setBusy(false);
+          }}
+        >
+          <PlugZap size={13} /> {busy ? 'Testando…' : 'Testar Solana RPC'}
+        </button>
+      </div>
+      {rpcMsg && <div className={cn('text-[11px]', rpcMsg.ok ? 'text-up' : 'text-down')}>{rpcMsg.ok ? 'OK — ' : 'Falhou — '}{rpcMsg.msg}</div>}
+      <p className="text-[11px] text-dim">
+        Solana RPC "IDLE" (apagado) é normal quando não há carteiras de operador monitoradas: ele só trabalha quando tem carteira para vigiar. A RPC pública é limitada; para o módulo Operadores, uma RPC grátis da Helius (helius.dev) ou QuickNode costuma ser bem mais estável — cole em Operadores → Ajustes.
+      </p>
     </div>
   );
 }

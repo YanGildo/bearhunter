@@ -1,3 +1,4 @@
+import type { RouteMode } from '@/adapters/route';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Alert, IndicatorConfig, IndicatorKey, MyAlert, PresetConfig, PresetKey, Timeframe, TrackedToken } from '@/domain/types';
@@ -45,6 +46,8 @@ export interface Prefs {
   rpcUrl: string;
   revivalGraveyard: boolean;
   pumpPortalKey: string;
+  /** rota de rede do PumpPortal e da RPC: direta, pelo Cloudflare ou automática */
+  netRoute: RouteMode;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -69,6 +72,7 @@ export const DEFAULT_PREFS: Prefs = {
   rpcUrl: 'https://api.mainnet-beta.solana.com',
   revivalGraveyard: true,
   pumpPortalKey: '',
+  netRoute: 'auto',
 };
 
 interface State {

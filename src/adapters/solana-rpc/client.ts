@@ -2,6 +2,7 @@
 // A RPC pública limita ~100 req/10s por IP e ~40 req/10s por método: ficamos em 30/10s.
 import { RateLimiter } from '../rateLimiter';
 import type { SourceHealth } from '../types';
+import { proxyOrigin, Route, wsOrigin } from '../route';
 import type { RpcTx } from '@/operators/parseTx';
 
 export const SOLANA_PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
@@ -12,7 +13,28 @@ export class SolanaRpc {
   private id = 1;
   private h: SourceHealth = { id: 'solana-rpc', label: 'Solana RPC', state: 'idle', lastSuccessAt: null, lastErrorAt: null, lastError: null, detail: null };
 
-  constructor(private getUrl: () => string = () => SOLANA_PUBLIC_RPC) {}
+  constructor(
+    private getUrl: () => string = () => SOLANA_PUBLIC_RPC,
+    readonly route: Route = new Route(),
+  ) {}
+
+  /** URL efetiva (direta ou pelo Cloudflare). */
+  endpoint() {
+    const origin = proxyOrigin();
+    const u = this.getUrl();
+    return this.route.pick() === 'proxy' && origin ? `${origin}/rpc?u=${encodeURIComponent(u)}` : u;
+  }
+
+  /** Botão "Testar": uma chamada simples (getSlot). */
+  async test(): Promise<{ ok: boolean; ms: number; msg: string }> {
+    const t0 = performance.now();
+    try {
+      const slot = await this.call<number>('getSlot', []);
+      return { ok: true, ms: Math.round(performance.now() - t0), msg: `respondeu (slot ${slot}) pela rota ${this.route.label()}` };
+    } catch (e) {
+      return { ok: false, ms: Math.round(performance.now() - t0), msg: `${(e as Error).message} (rota ${this.route.label()})` };
+    }
+  }
 
   health(): SourceHealth {
     return { ...this.h, requestsLastMinute: this.limiter.used() };
@@ -26,12 +48,21 @@ export class SolanaRpc {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12_000);
     try {
-      const res = await fetch(this.getUrl(), {
+      let res: Response;
+      try {
+        res = await fetch(this.endpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: this.id++, method, params }),
-        signal: ctrl.signal,
-      });
+          body: JSON.stringify({ jsonrpc: '2.0', id: this.id++, method, params }),
+          signal: ctrl.signal,
+        });
+      } catch (e) {
+        // falha de rede (bloqueio/timeout): conta para trocar de rota
+        this.route.fail();
+        throw e instanceof DOMException && e.name === 'AbortError' ? e : new Error('sem conexão com a RPC (a rede pode estar bloqueando)');
+      }
+      this.route.ok();
+      if (res.status === 403) throw new Error('HTTP 403 (a RPC recusou; use uma RPC grátis da Helius/QuickNode)');
       if (res.status === 429) {
         this.limiter.pause(15_000);
         throw new Error('HTTP 429 (limite da RPC, pausando 15s)');
@@ -114,7 +145,12 @@ export class SolanaLogsSocket {
   private stopped = true;
   connected = false;
 
-  constructor(private getUrl: () => string, private onLogs: LogsHandler, private onState: (s: 'ok' | 'connecting' | 'degraded' | 'off', detail?: string) => void) {}
+  constructor(
+    private getUrl: () => string,
+    private onLogs: LogsHandler,
+    private onState: (s: 'ok' | 'connecting' | 'degraded' | 'off', detail?: string) => void,
+    private route: Route = new Route(),
+  ) {}
 
   start(wallets: string[]) {
     this.wanted = new Set(wallets);
@@ -130,7 +166,10 @@ export class SolanaLogsSocket {
   }
 
   private wsUrl() {
-    return this.getUrl().replace(/^http/, 'ws');
+    const origin = proxyOrigin();
+    const u = this.getUrl();
+    if (this.route.pick() === 'proxy' && origin) return `${wsOrigin(origin)}/rpc?u=${encodeURIComponent(u)}`;
+    return u.replace(/^http/, 'ws');
   }
 
   private connect() {
@@ -145,6 +184,7 @@ export class SolanaLogsSocket {
     }
     this.ws = ws;
     ws.onopen = () => {
+      this.route.ok();
       this.retry = 0;
       this.connected = true;
       this.subToWallet.clear();
@@ -175,6 +215,7 @@ export class SolanaLogsSocket {
       }
     };
     ws.onclose = () => {
+      if (!this.connected) this.route.fail();
       this.connected = false;
       this.ws = null;
       if (!this.stopped) this.fail();
@@ -204,7 +245,7 @@ export class SolanaLogsSocket {
   private fail() {
     const delay = Math.min(60_000, 2000 * 2 ** this.retry) * (0.8 + Math.random() * 0.4);
     this.retry++;
-    this.onState('degraded', `WebSocket caiu; reconectando em ${Math.round(delay / 1000)}s (a varredura periódica continua)`);
+    this.onState('degraded', `WebSocket caiu; reconectando em ${Math.round(delay / 1000)}s pela rota ${this.route.label()} (a varredura periódica continua)`);
     this.timer = setTimeout(() => this.connect(), delay);
   }
 
