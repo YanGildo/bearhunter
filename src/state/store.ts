@@ -101,6 +101,8 @@ interface State {
   alertFilter: AlertFilter;
   myAlerts: MyAlert[];
   savedTokens: TrackedToken[]; // tokens manuais/favoritos/pastas, sem observações
+  /** aba Ganhos: registro manual das operações do usuário */
+  journal: JournalEntry[];
 
   set: (p: Partial<State>) => void;
   setPrefs: (p: Partial<Prefs>) => void;
@@ -137,6 +139,7 @@ export const useStore = create<State>()(
       alertFilter: 'all',
       myAlerts: [],
       savedTokens: [],
+      journal: [],
 
       set: (p) => set(p),
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
@@ -177,6 +180,7 @@ export const useStore = create<State>()(
         alertFilter: s.alertFilter,
         myAlerts: s.myAlerts,
         savedTokens: s.savedTokens,
+        journal: s.journal,
         selected: s.selected,
       }),
       merge: (persisted, current) => {
@@ -211,3 +215,17 @@ export const useStore = create<State>()(
 );
 
 export const getState = () => useStore.getState();
+
+export interface JournalEntry {
+  id: string;
+  /** data da operação (ms) */
+  at: number;
+  symbol: string;
+  ca: string | null;
+  unit: 'SOL' | 'USD';
+  /** valor que entrou (compra) */
+  buy: number;
+  /** valor que saiu (venda) */
+  sell: number;
+  note: string;
+}

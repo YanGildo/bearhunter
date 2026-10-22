@@ -15,6 +15,7 @@ import { Toaster } from './ui/primitives';
 import { collector } from './collector/collector';
 import { unlockAudio } from './services/sound';
 import Admin from './pages/Admin';
+import Journal from './pages/Journal';
 import { LoadingPage, LoginPage, PendingPage } from './pages/Login';
 import { operatorsAllowed, useAuth } from './state/auth';
 import { AUTH_ENABLED } from './services/supabase';
@@ -46,6 +47,7 @@ function Shell() {
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/history" element={<History />} />
+        <Route path="/ganhos" element={<Journal />} />
         <Route path="/operadores" element={operatorsAllowed() ? <Operators /> : <Navigate to="/dashboard" replace />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/settings" element={<Settings />} />
