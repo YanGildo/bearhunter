@@ -29,6 +29,8 @@ export interface DiscoveredToken {
   imageUrl?: string | null;
   signature?: string | null;
   boostAmount?: number | null;
+  /** link do metadado do token (PumpPortal, evento de criação) — usado para achar a foto */
+  metadataUri?: string | null;
   at: number;
 }
 

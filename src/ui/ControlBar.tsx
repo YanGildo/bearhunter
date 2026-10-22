@@ -86,7 +86,7 @@ function GlobalSearch() {
           {!busy && !err && !res.length && <div className="p-2 text-[11px] text-dim">Nenhum resultado na Solana.</div>}
           {res.map(({ observation: o, meta: m }) => (
             <div key={m.address} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-raised">
-              <TokenLogo src={m.imageUrl} symbol={m.symbol} size={22} />
+              <TokenLogo src={m.imageUrl} symbol={m.symbol} address={m.address} size={22} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-semibold">
                   {m.symbol} <span className="font-normal text-muted">{m.name}</span>

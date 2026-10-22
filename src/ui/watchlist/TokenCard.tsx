@@ -60,7 +60,7 @@ function CardImpl({ t, tf, now, favorite, scam, selected, onOpen, onFavorite, on
       )}
     >
       <div className="flex items-center gap-2">
-        <TokenLogo src={t.meta.imageUrl} symbol={t.meta.symbol} size={24} />
+        <TokenLogo src={t.meta.imageUrl} symbol={t.meta.symbol} address={t.address} size={24} />
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot)} title={t.status} />
         <span className="truncate text-[13px] font-bold">{t.meta.symbol ?? t.address.slice(0, 6)}</span>
         <span className="min-w-0 truncate text-[11px] text-muted">{t.meta.name ?? (t.status === 'waiting' ? 'aguardando dados…' : '')}</span>

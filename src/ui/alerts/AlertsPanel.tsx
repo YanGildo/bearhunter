@@ -72,7 +72,7 @@ function AlertCardImpl({ a, now, isNew, favorite, scam }: { a: Alert; now: numbe
         scam && 'bg-down/[0.06]', presetBorder[p], glow[p], isNew && 'flash-in')}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
+        <TokenLogo src={a.imageUrl} symbol={a.symbol} address={a.tokenAddress} size={22} />
         <Dir size={14} className={a.direction === 'buy' ? 'text-up' : 'text-down'} />
         <span className="text-[13px] font-bold">{a.symbol ?? '—'}</span>
         <span className={cn('chip', presetBorder[p], presetBg[p], presetText[p])}>{presetLabel(a)}</span>

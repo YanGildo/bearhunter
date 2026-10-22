@@ -61,7 +61,7 @@ function TokenHeader({ token }: { token: string }) {
   const pair = t?.lastObservation?.pairAddress ?? null;
   return (
     <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
-      <TokenLogo src={t?.meta.imageUrl} symbol={t?.meta.symbol} size={20} />
+      <TokenLogo src={t?.meta.imageUrl} symbol={t?.meta.symbol} address={token} size={20} />
       <span className="font-bold">${t?.meta.symbol ?? '—'}</span>
       <span className="min-w-0 truncate text-[11px] text-muted">{t?.meta.name}</span>
       <span className="num rounded bg-raised px-1.5 text-[10px] text-muted">{shortAddr(token)}</span>
@@ -148,7 +148,7 @@ function Panorama() {
               className="flex w-full items-center gap-2 rounded-md border border-line bg-card px-2.5 py-2 text-left hover:bg-raised"
               onClick={() => a.tokenAddress !== 'TEST' && useStore.getState().select(a.tokenAddress)}
             >
-              <TokenLogo src={a.imageUrl} symbol={a.symbol} size={22} />
+              <TokenLogo src={a.imageUrl} symbol={a.symbol} address={a.tokenAddress} size={22} />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 font-bold">
                   {a.symbol} <span className={cn('chip border-transparent', presetBg[alertColor(a)], presetText[alertColor(a)])}>{presetLabel(a)}</span>
@@ -286,7 +286,7 @@ export function ChartModal() {
       }}
       title={
         <span className="flex items-center gap-2 normal-case tracking-normal">
-          <TokenLogo src={c.imageUrl} symbol={c.symbol} size={20} /> ${c.symbol ?? '—'} <span className="text-[11px] font-normal text-muted">{c.name}</span>
+          <TokenLogo src={c.imageUrl} symbol={c.symbol} address={c.token} size={20} /> ${c.symbol ?? '—'} <span className="text-[11px] font-normal text-muted">{c.name}</span>
         </span>
       }
       className="h-[86vh] max-w-[1200px]"

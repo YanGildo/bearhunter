@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizePair, selectPrimaryPair, type DsPair } from './dexscreener/normalize';
 import { parsePumpPortalMessage, BoundedSet } from './pumpportal/stream';
+import { ipfsToHttp } from '@/collector/images';
 
 const TOKEN = 'MintAAA111pump';
 
@@ -57,6 +58,7 @@ describe('PumpPortal', () => {
   it('converte criação e migração e ignora outros pools e mensagens', () => {
     expect(parsePumpPortalMessage(JSON.stringify({ txType: 'create', mint: 'M1', name: 'N', symbol: 'S', signature: 'sig', pool: 'pump' }))).toMatchObject({ address: 'M1', source: 'pumpportal_new' });
     expect(parsePumpPortalMessage(JSON.stringify({ txType: 'migrate', mint: 'M2' }))?.source).toBe('pumpportal_migrated');
+    expect(parsePumpPortalMessage(JSON.stringify({ txType: 'create', mint: 'M3', uri: 'https://ipfs.io/ipfs/abc', pool: 'pump' }))?.metadataUri).toBe('https://ipfs.io/ipfs/abc');
     expect(parsePumpPortalMessage(JSON.stringify({ txType: 'create', mint: 'M3', pool: 'bonk' }))).toBeNull();
     expect(parsePumpPortalMessage(JSON.stringify({ message: 'Successfully subscribed' }))).toBeNull();
     expect(parsePumpPortalMessage(JSON.stringify({ txType: 'buy', mint: 'M4' }))).toBeNull();
@@ -70,5 +72,12 @@ describe('PumpPortal', () => {
     s.add('c');
     expect(s.has('a')).toBe(false);
     expect(s.has('c')).toBe(true);
+  });
+});
+
+describe('ipfsToHttp', () => {
+  it('converte ipfs:// para gateway http', () => {
+    expect(ipfsToHttp('ipfs://Qm123')).toBe('https://ipfs.io/ipfs/Qm123');
+    expect(ipfsToHttp('https://x.com/a.png')).toBe('https://x.com/a.png');
   });
 });

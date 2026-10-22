@@ -38,6 +38,7 @@ export function parsePumpPortalMessage(raw: string, at = Date.now()): Discovered
     name: typeof d.name === 'string' ? d.name : null,
     symbol: typeof d.symbol === 'string' ? d.symbol : null,
     signature: typeof d.signature === 'string' ? d.signature : null,
+    metadataUri: typeof d.uri === 'string' && d.uri ? d.uri : null,
     at,
   };
 }

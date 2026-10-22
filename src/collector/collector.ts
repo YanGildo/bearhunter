@@ -9,6 +9,7 @@ import { PRESET_META } from '@/domain/presets';
 import type { Alert, DiscoverySource, IndicatorConfig, MarketObservation, MyAlert, PresetKey, TimeframeConfig, TokenMeta, TrackedToken } from '@/domain/types';
 import { PRESET_KEYS } from '@/domain/types';
 import { getState, useStore } from '@/state/store';
+import { rememberMetadataUri, wantImage } from './images';
 import { store as db } from '@/storage/db';
 import { playSound } from '@/services/sound';
 import { onTick } from '@/services/clock';
@@ -200,6 +201,7 @@ class Collector {
 
   private onDiscovered(d: DiscoveredToken) {
     const p = getState().prefs;
+    rememberMetadataUri(d.address, d.metadataUri);
     if (d.source === 'pumpportal_new') operatorHooks.onCreated?.(d.address, d.at);
     if (d.source === 'pumpportal_migrated') operatorHooks.onMigration?.(d.address, d.at, d.symbol ?? getState().tokens[d.address]?.meta.symbol ?? null);
     if (d.source === 'pumpportal_new' && !p.discoverNew) return;
@@ -488,6 +490,7 @@ class Collector {
       const t = tokens[o.tokenAddress];
       if (!t) continue;
       const m = metaBy.get(o.tokenAddress);
+      if (!(m?.imageUrl ?? t.meta.imageUrl)) wantImage(o.tokenAddress);
       const meta: TokenMeta = m
         ? { ...m, name: m.name ?? t.meta.name, symbol: m.symbol ?? t.meta.symbol, imageUrl: m.imageUrl ?? t.meta.imageUrl }
         : t.meta;

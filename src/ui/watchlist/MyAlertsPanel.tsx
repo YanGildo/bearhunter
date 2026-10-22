@@ -110,7 +110,7 @@ export function MyAlertsPanel() {
           return (
             <div key={m.id} className={cn('rounded-lg border bg-card p-2.5', m.status === 'triggered' ? 'glow-custom border-custom/60' : 'border-custom/30')}>
               <div className="flex items-center gap-2">
-                <TokenLogo src={t?.meta.imageUrl} symbol={m.symbol} size={20} />
+                <TokenLogo src={t?.meta.imageUrl} symbol={m.symbol} address={m.tokenAddress} size={20} />
                 <span className="font-bold">{m.symbol ?? m.tokenAddress.slice(0, 6)}</span>
                 <span className="chip border-custom/50 bg-custom/15 text-custom">custom</span>
                 <span className={cn('chip', m.status === 'waiting' ? 'border-warn/40 text-warn' : m.status === 'triggered' ? 'border-up/40 text-up' : 'border-line text-dim')}>{m.status}</span>
