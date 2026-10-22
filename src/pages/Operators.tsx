@@ -3,6 +3,7 @@ import { Copy, ExternalLink, LineChart, Plus, Search, Skull, Trash2, Wallet, Rad
 import { useStore } from '@/state/store';
 import { useUi } from '@/state/ui';
 import { operatorTracker, type HolderRow } from '@/operators/tracker';
+import type { CrossResult } from '@/operators/crossWallets';
 import { extractAddresses } from '@/operators/detectors';
 import { CANDIDATE_KINDS, MAX_OPERATOR_WALLETS, ROLE_META, SIGNAL_META, type OperatorSignal, type SignalKind, type WalletRole } from '@/operators/types';
 import { fmtAge, fmtTime, fmtUsd, shortAddr } from '@/domain/num';
@@ -494,6 +495,209 @@ function Confirmed() {
 // ---------- descobrir fazenda ----------
 
 function Discover() {
+  const [mode, setMode] = useState<'wallets' | 'tokens'>('wallets');
+  const [walletSeed, setWalletSeed] = useState('');
+  return (
+    <Card title="Descobrir fazenda" icon={Users}>
+      <div className="flex flex-wrap gap-1 border-b border-line px-3 py-1.5">
+        <button className={cn('tab h-7 px-3', mode === 'wallets' && 'tab-active')} onClick={() => setMode('wallets')}>
+          Pelas carteiras que você viu
+        </button>
+        <button className={cn('tab h-7 px-3', mode === 'tokens' && 'tab-active')} onClick={() => setMode('tokens')}>
+          Pelos holders dos tokens
+        </button>
+      </div>
+      {mode === 'wallets' ? (
+        <DiscoverWallets seed={walletSeed} />
+      ) : (
+        <DiscoverTokens
+          onAnalyzeWallets={(ws) => {
+            setWalletSeed(ws.join('\n'));
+            setMode('wallets');
+          }}
+        />
+      )}
+      <p className="border-t border-line px-3 py-2 text-[10.5px] text-dim">
+        As duas análises leem dados da blockchain pela RPC configurada em Ajustes. A RPC pública é lenta e pode recusar; com uma RPC grátis da Helius fica bem mais rápido.
+      </p>
+    </Card>
+  );
+}
+
+function RoleAdd({ addrs, onDone }: { addrs: string[]; onDone: (role: WalletRole) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="text-[11px] text-muted">Rastrear {addrs.length} como</span>
+      {ROLES.map((r) => (
+        <button
+          key={r}
+          className={cn('chip h-6 cursor-pointer', roleTone[r])}
+          disabled={!addrs.length}
+          onClick={() => {
+            const n = operatorTracker.addWallets(addrs, r, ROLE_META[r].label);
+            toast(n ? `${n} carteira(s) adicionada(s) como ${ROLE_META[r].label}` : 'Essas carteiras já estão na lista');
+            onDone(r);
+          }}
+        >
+          <Plus size={10} /> {ROLE_META[r].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DiscoverWallets({ seed }: { seed: string }) {
+  const known = useStore((s) => s.operator.wallets);
+  const market = useStore((s) => s.tokens);
+  const [text, setText] = useState(seed);
+  const [perWallet, setPerWallet] = useState(25);
+  const [windowS, setWindowS] = useState(10);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [res, setRes] = useState<CrossResult | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (seed) setText(seed);
+  }, [seed]);
+  const roles = useMemo(() => new Map(known.map((w) => [w.address, w.role])), [known]);
+  const run = async () => {
+    const ws = extractAddresses(text).slice(0, 15);
+    if (ws.length < 2) return toast('Cole pelo menos 2 carteiras para cruzar');
+    setErrors([]);
+    setRes(null);
+    setBusy('0%');
+    const errs: string[] = [];
+    const r = await operatorTracker.analyzeWallets(ws, perWallet, windowS, (d, t, err) => {
+      setBusy(`${Math.round((d / t) * 100)}%`);
+      if (err) errs.push(err);
+    });
+    setErrors(errs);
+    setRes(r);
+    setSel(new Set(r.wallets.filter((w) => w.shared > 0 && !roles.has(w.wallet)).map((w) => w.wallet)));
+    setBusy(null);
+  };
+  const sym = (mint: string) => market[mint]?.meta.symbol ?? shortAddr(mint, 4);
+  const t = (ms: number | null) => (ms == null ? '—' : new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  const est = Math.ceil((extractAddresses(text).slice(0, 15).length * (perWallet + 1)) / 3);
+  return (
+    <div className="space-y-2 p-3">
+      <p className="text-[11px] text-muted">
+        Cole as carteiras que você viu trabalhando nos pares do operador (GMGN, Solscan ou endereço, até 15). O bot lê as últimas transações de cada uma e mostra:
+        <b className="text-fg"> em quais tokens elas estiveram juntas</b>, <b className="text-fg">quem comprou nos mesmos segundos</b> e <b className="text-fg">quem vendeu junto</b>. Daí você escolhe quais rastrear e com qual papel.
+      </p>
+      <textarea className="input num h-auto py-2 text-[11px]" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="Uma carteira por linha (ou links do GMGN)" />
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
+        <label className="flex items-center gap-1">
+          Últimas
+          <input className="input num h-8 w-14 text-right" type="number" min={5} max={100} value={perWallet} onChange={(e) => setPerWallet(Math.max(5, Math.min(100, Number(e.target.value) || 25)))} />
+          transações por carteira
+        </label>
+        <label className="flex items-center gap-1">
+          "Junto" = até
+          <input className="input num h-8 w-14 text-right" type="number" min={1} max={300} value={windowS} onChange={(e) => setWindowS(Math.max(1, Math.min(300, Number(e.target.value) || 10)))} />s
+        </label>
+        <button className="btn ml-auto h-8 border-primary/50 bg-primary/15 text-primary" disabled={!!busy} onClick={run}>
+          <Search size={13} /> {busy ? `Analisando ${busy}…` : 'Cruzar carteiras'}
+        </button>
+      </div>
+      {!busy && !res && <div className="text-[10.5px] text-dim">Tempo estimado com a RPC pública: ~{est}s.</div>}
+      {errors.length > 0 && <div className="text-[10.5px] text-down">{errors.slice(0, 4).join(' · ')}</div>}
+      {res && (
+        <>
+          <div className="rounded-md border border-line">
+            <div className="flex flex-wrap items-center gap-2 border-b border-line px-2.5 py-1.5">
+              <span className="label">Carteiras</span>
+              <span className="ml-auto" />
+              <RoleAdd
+                addrs={[...sel]}
+                onDone={() => {
+                  setSel(new Set());
+                }}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {res.wallets.map((w) => {
+                const k = roles.get(w.wallet);
+                return (
+                  <label key={w.wallet} className="num flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-line/60 px-2.5 py-1.5 text-[11px]">
+                    <input
+                      type="checkbox"
+                      disabled={!!k}
+                      checked={sel.has(w.wallet)}
+                      onChange={() => {
+                        const n = new Set(sel);
+                        if (n.has(w.wallet)) n.delete(w.wallet);
+                        else n.add(w.wallet);
+                        setSel(n);
+                      }}
+                    />
+                    <span className="font-semibold">{shortAddr(w.wallet, 5)}</span>
+                    {k && <span className={cn('chip', roleTone[k])}>{ROLE_META[k].label}</span>}
+                    {!k && w.hint && <span className={cn('chip opacity-80', roleTone[w.hint])} title="Sugestão do bot (só uma dica)">parece {ROLE_META[w.hint].label}</span>}
+                    <span className="text-muted">{w.txs} tx · {w.tokens} token(s)</span>
+                    <span className={w.shared ? 'text-revival' : 'text-dim'}>{w.shared} em comum</span>
+                    <span className={w.syncBuys ? 'text-up' : 'text-dim'} title={`Comprou a até ${windowS}s de outra carteira da lista`}>
+                      comprou junto {w.syncBuys}×
+                    </span>
+                    <span className={w.syncSells ? 'text-down' : 'text-dim'} title={`Vendeu a até ${windowS}s de outra carteira da lista`}>
+                      vendeu junto {w.syncSells}×
+                    </span>
+                    <span className="ml-auto text-dim">
+                      {w.boughtSol.toFixed(2)} → {w.soldSol.toFixed(2)} SOL
+                    </span>
+                    <a className="text-dim hover:text-fg" href={`https://gmgn.ai/sol/address/${w.wallet}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                      <ExternalLink size={11} />
+                    </a>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded-md border border-line">
+            <div className="label border-b border-line px-2.5 py-1.5">Tokens em comum ({res.shared.length})</div>
+            <div className="max-h-72 overflow-y-auto">
+              {!res.shared.length && <div className="p-3 text-center text-[11px] text-dim">Nenhum token em comum nessas transações. Aumente o número de transações por carteira.</div>}
+              {res.shared.map((s) => (
+                <div key={s.mint} className="border-b border-line/60 px-2.5 py-1.5 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button className="font-semibold hover:text-primary" onClick={() => openChart(s.mint)}>
+                      ${sym(s.mint)}
+                    </button>
+                    <span className="text-revival">{s.wallets.length} carteiras</span>
+                    {s.buySpreadS != null && (
+                      <span className={s.buySpreadS <= windowS ? 'text-up' : 'text-muted'}>
+                        entradas em {s.buySpreadS < 60 ? `${Math.round(s.buySpreadS)}s` : `${Math.round(s.buySpreadS / 60)}min`}
+                      </span>
+                    )}
+                    {s.sellSpreadS != null && (
+                      <span className={s.sellSpreadS <= windowS ? 'text-down' : 'text-muted'}>
+                        saídas em {s.sellSpreadS < 60 ? `${Math.round(s.sellSpreadS)}s` : `${Math.round(s.sellSpreadS / 60)}min`}
+                      </span>
+                    )}
+                    <span className="num ml-auto text-dim">{t(s.firstBuyAt)}</span>
+                    <a className="text-dim hover:text-fg" href={gmgnUrl(s.mint)} target="_blank" rel="noreferrer">
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+                  <div className="num mt-0.5 flex flex-wrap gap-x-3 text-[10.5px] text-muted">
+                    {s.wallets.map((w) => (
+                      <span key={w.wallet}>
+                        {shortAddr(w.wallet, 4)}: {w.buys ? `comprou ${w.buySol.toFixed(2)}` : '—'}
+                        {w.sells ? ` · vendeu ${w.sellSol.toFixed(2)}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DiscoverTokens({ onAnalyzeWallets }: { onAnalyzeWallets: (ws: string[]) => void }) {
   const opTokens = useStore((s) => s.operator.tokens);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -503,7 +707,7 @@ function Discover() {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const run = async () => {
     const mints = extractAddresses(text).slice(0, 25);
-    if (!mints.length) return toast('Cole links ou endereços de tokens do operador');
+    if (!mints.length) return toast('Cole links ou endereços dos pares do operador');
     setErrors([]);
     setRows(null);
     setBusy(`0/${mints.length}`);
@@ -519,72 +723,69 @@ function Discover() {
   };
   const shown = (rows ?? []).filter((r) => r.tokens.length >= minRepeat || (rows && extractAddresses(text).length === 1));
   return (
-    <Card title="Descobrir fazenda pelos holders" icon={Users}>
-      <div className="space-y-2 p-3">
-        <p className="text-[11px] text-muted">
-          Cole links (GMGN, DexScreener, Solscan) ou endereços de tokens do operador. O bot busca os ~20 maiores holders de cada um pela RPC, ignora pools e bonding curve, e mostra as carteiras que se repetem entre os tokens.
-        </p>
-        <textarea className="input num h-auto py-2 text-[11px]" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="https://gmgn.ai/sol/token/…  (até 25 tokens)" />
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="btn h-8" disabled={!Object.keys(opTokens).length} onClick={() => setText(Object.keys(opTokens).slice(0, 25).join('\n'))}>
-            Usar tokens do operador
-          </button>
-          <label className="flex items-center gap-1.5 text-[11px] text-muted">
-            Aparece em pelo menos
-            <input className="input num h-8 w-14 text-right" type="number" min={1} max={25} value={minRepeat} onChange={(e) => setMinRepeat(Math.max(1, Number(e.target.value) || 1))} />
-            tokens
-          </label>
-          <button className="btn ml-auto h-8 border-primary/50 bg-primary/15 text-primary" disabled={!!busy} onClick={run}>
-            <Search size={13} /> {busy ? `Analisando ${busy}…` : 'Analisar'}
-          </button>
-        </div>
-        {errors.length > 0 && <div className="text-[10.5px] text-down">{errors.slice(0, 4).join(' · ')}</div>}
-        {rows && (
-          <div className="rounded-md border border-line">
-            <div className="flex items-center gap-2 border-b border-line px-2.5 py-1.5 text-[11px]">
-              <span className="text-muted">{shown.length} carteira(s)</span>
-              <button
-                className="btn ml-auto h-7 border-revival/50 text-revival"
-                disabled={!sel.size}
-                onClick={() => {
-                  const n = operatorTracker.addWallets([...sel], 'fazenda', 'Fazenda');
-                  toast(`${n} carteira(s) adicionada(s) como Fazenda`);
-                  setSel(new Set());
-                  setRows(rows.map((r) => (sel.has(r.owner) ? { ...r, known: 'fazenda' } : r)));
-                }}
-              >
-                <Plus size={12} /> Adicionar {sel.size} como Fazenda
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {shown.map((r) => (
-                <label key={r.owner} className="num flex cursor-pointer items-center gap-2 border-b border-line/60 px-2.5 py-1.5 text-[11px]">
-                  <input
-                    type="checkbox"
-                    disabled={!!r.known}
-                    checked={sel.has(r.owner)}
-                    onChange={() => {
-                      const n = new Set(sel);
-                      if (n.has(r.owner)) n.delete(r.owner);
-                      else n.add(r.owner);
-                      setSel(n);
-                    }}
-                  />
-                  <span className="font-semibold">{shortAddr(r.owner, 5)}</span>
-                  {r.known && <span className={cn('chip', roleTone[r.known])}>{ROLE_META[r.known].label}</span>}
-                  <span className="text-revival">em {r.tokens.length} token(s)</span>
-                  <span className="ml-auto text-dim">{r.tokens.map((t) => (t.pct != null ? `${t.pct.toFixed(1)}%` : '?')).join(' · ')}</span>
-                  <a className="text-dim hover:text-fg" href={`https://gmgn.ai/sol/address/${r.owner}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                    <ExternalLink size={11} />
-                  </a>
-                </label>
-              ))}
-              {!shown.length && <div className="p-3 text-center text-[11px] text-dim">Nenhuma carteira se repete com esse filtro. Diminua o "aparece em pelo menos".</div>}
-            </div>
-          </div>
-        )}
+    <div className="space-y-2 p-3">
+      <p className="text-[11px] text-muted">
+        Cole os CAs (ou links) dos pares que ele lançou ao mesmo tempo. O bot pega os ~20 maiores holders de cada um (ignorando pool e bonding curve) e mostra as carteiras que <b className="text-fg">seguram vários desses pares ao mesmo tempo</b> e quanto do supply cada uma tem. Funciona melhor com os pares ainda vivos (quem já vendeu tudo não aparece como holder).
+      </p>
+      <textarea className="input num h-auto py-2 text-[11px]" rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="CAs ou links dos pares (até 25)" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn h-8" disabled={!Object.keys(opTokens).length} onClick={() => setText(Object.keys(opTokens).slice(0, 25).join('\n'))}>
+          Usar tokens do operador
+        </button>
+        <label className="flex items-center gap-1.5 text-[11px] text-muted">
+          Aparece em pelo menos
+          <input className="input num h-8 w-14 text-right" type="number" min={1} max={25} value={minRepeat} onChange={(e) => setMinRepeat(Math.max(1, Number(e.target.value) || 1))} />
+          pares
+        </label>
+        <button className="btn ml-auto h-8 border-primary/50 bg-primary/15 text-primary" disabled={!!busy} onClick={run}>
+          <Search size={13} /> {busy ? `Analisando ${busy}…` : 'Analisar holders'}
+        </button>
       </div>
-    </Card>
+      {errors.length > 0 && <div className="text-[10.5px] text-down">{errors.slice(0, 4).join(' · ')}</div>}
+      {rows && (
+        <div className="rounded-md border border-line">
+          <div className="flex flex-wrap items-center gap-2 border-b border-line px-2.5 py-1.5 text-[11px]">
+            <span className="text-muted">{shown.length} carteira(s)</span>
+            <button className="btn h-7" disabled={sel.size < 2} onClick={() => onAnalyzeWallets([...sel].slice(0, 15))} title="Lê o histórico dessas carteiras para ver quem comprou e vendeu junto">
+              Cruzar histórico das {Math.min(sel.size, 15)}
+            </button>
+            <span className="ml-auto" />
+            <RoleAdd
+              addrs={[...sel]}
+              onDone={(role) => {
+                setRows(rows.map((r) => (sel.has(r.owner) ? { ...r, known: role } : r)));
+                setSel(new Set());
+              }}
+            />
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            {shown.map((r) => (
+              <label key={r.owner} className="num flex cursor-pointer items-center gap-2 border-b border-line/60 px-2.5 py-1.5 text-[11px]">
+                <input
+                  type="checkbox"
+                  disabled={!!r.known}
+                  checked={sel.has(r.owner)}
+                  onChange={() => {
+                    const n = new Set(sel);
+                    if (n.has(r.owner)) n.delete(r.owner);
+                    else n.add(r.owner);
+                    setSel(n);
+                  }}
+                />
+                <span className="font-semibold">{shortAddr(r.owner, 5)}</span>
+                {r.known && <span className={cn('chip', roleTone[r.known])}>{ROLE_META[r.known].label}</span>}
+                <span className="text-revival">em {r.tokens.length} par(es)</span>
+                <span className="ml-auto text-dim">{r.tokens.map((t) => (t.pct != null ? `${t.pct.toFixed(1)}%` : '?')).join(' · ')}</span>
+                <a className="text-dim hover:text-fg" href={`https://gmgn.ai/sol/address/${r.owner}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  <ExternalLink size={11} />
+                </a>
+              </label>
+            ))}
+            {!shown.length && <div className="p-3 text-center text-[11px] text-dim">Nenhuma carteira se repete com esse filtro. Diminua o "aparece em pelo menos".</div>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

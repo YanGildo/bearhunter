@@ -120,3 +120,26 @@ describe('indicadores', () => {
     expect(soundLevel(null, 100, 200)).toBe('normal');
   });
 });
+
+import { crossWallets } from './crossWallets';
+describe('crossWallets', () => {
+  const mv = (wallet: string, mint: string, kind: 'buy' | 'sell', at: number, sol: number) => ({ signature: `${wallet}${mint}${kind}${at}`, wallet, mint, kind, tokenAmount: 1, solAmount: sol, at, venue: 'pump' as const, counterparty: null });
+  it('acha tokens em comum, compra junto e venda junto', () => {
+    const T = 1_800_000_000_000;
+    const m = new Map([
+      ['A', [mv('A', 'X', 'buy', T, 0.05), mv('A', 'Y', 'buy', T + 60_000, 0.05), mv('A', 'Z', 'buy', T, 1)]],
+      ['B', [mv('B', 'X', 'buy', T + 3000, 1), mv('B', 'X', 'sell', T + 90_000, 2), mv('B', 'Y', 'buy', T + 62_000, 1), mv('B', 'Y', 'sell', T + 200_000, 2)]],
+      ['C', [mv('C', 'X', 'buy', T + 4000, 1), mv('C', 'X', 'sell', T + 91_000, 2), mv('C', 'Y', 'sell', T + 201_000, 2)]],
+    ]);
+    const r = crossWallets(m, 10);
+    expect(r.shared.map((s) => s.mint).sort()).toEqual(['X', 'Y']);
+    const x = r.shared.find((s) => s.mint === 'X')!;
+    expect(x.buySpreadS).toBe(4);
+    expect(x.sellSpreadS).toBe(1);
+    const a = r.wallets.find((w) => w.wallet === 'A')!;
+    expect(a.shared).toBe(2);
+    expect(a.hint).toBe('marcador');
+    expect(r.wallets.find((w) => w.wallet === 'B')!.syncSells).toBe(2);
+    expect(r.wallets.find((w) => w.wallet === 'B')!.hint).toBe('fazenda');
+  });
+});

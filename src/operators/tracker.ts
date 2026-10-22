@@ -14,6 +14,7 @@ import { getState, useStore } from '@/state/store';
 import { botsState, bundleSignature, distinctSellers, fastMigrationSeconds, isDump, type SellMark } from './detectors';
 import { operatorHooks } from './hooks';
 import { actionFromLogs, parseWalletTx, type WalletMove } from './parseTx';
+import { crossWallets, type CrossResult } from './crossWallets';
 import type { AccountTrade } from '@/adapters/pumpportal/stream';
 import { CANDIDATE_KINDS, ROLE_META, type OperatorSignal, type OperatorToken, type OperatorWallet, type SignalKind, type WalletRole } from './types';
 
@@ -579,6 +580,42 @@ class OperatorTracker {
       lines.push('');
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Lê as últimas `perWallet` transações de cada carteira (RPC) e cruza: tokens em comum,
+   * quem comprou junto e quem vendeu junto. Use com as carteiras que você viu nos pares do operador.
+   */
+  async analyzeWallets(
+    wallets: string[],
+    perWallet: number,
+    windowS: number,
+    onProgress: (done: number, total: number, err?: string) => void,
+  ): Promise<CrossResult> {
+    const moves = new Map<string, WalletMove[]>();
+    const total = wallets.length * (perWallet + 1);
+    let done = 0;
+    for (const w of wallets) {
+      const list: WalletMove[] = [];
+      try {
+        const sigs = (await this.rpc.getSignatures(w, perWallet)).filter((x) => !x.err);
+        onProgress(++done, total);
+        done += perWallet - sigs.length;
+        // até 4 transações em paralelo; o limitador da RPC segura o ritmo
+        for (let i = 0; i < sigs.length; i += 4) {
+          const chunk = sigs.slice(i, i + 4);
+          const txs = await Promise.all(chunk.map((x) => this.rpc.getTransaction(x.signature).catch(() => null)));
+          for (const tx of txs) list.push(...parseWalletTx(tx, w));
+          done += chunk.length;
+          onProgress(done, total);
+        }
+      } catch (e) {
+        done = Math.min(total, done + perWallet + 1);
+        onProgress(done, total, `${shortAddr(w)}: ${(e as Error).message}`);
+      }
+      moves.set(w, list);
+    }
+    return crossWallets(moves, windowS);
   }
 
   /** Cruza os maiores holders de vários tokens: carteiras que se repetem são candidatas a fazenda. */

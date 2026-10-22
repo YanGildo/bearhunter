@@ -93,6 +93,7 @@ Em cada sinal e token da aba Operadores há **É ele** (vai para "Confirmados do
 Cole sua API key em Operadores → Ajustes. Com ela, as compras e vendas das carteiras chegam direto do PumpPortal em tempo real (0,01 SOL a cada 10 mil eventos). A key fica só no seu navegador.
 
 ## Login e Admin
+No Admin: aprovar, bloquear, liberar Operadores, ver o último acesso e excluir usuário (apaga login, perfil e configurações).
 Com o Supabase configurado, quem se cadastra fica **pendente** até o admin aprovar em **Admin**. O admin também libera a aba **Operadores** por usuário. Presets, Watchlist, pastas, My Alerts e carteiras de operador ficam salvos na conta.
 
 ## Presets padrão (v2)
@@ -102,6 +103,7 @@ Initial = números do DRK (vol +50%, MCAP +50%, vol ≥ $500, MCAP ≥ $10K). St
 Alertas manuais por token (MCAP, Volume 5M, Variação 5M, Liquidez; maior/menor que). Roxo, badge CUSTOM, som próprio. Disparam uma vez; use "rearmar" para armar de novo.
 
 ## Sons
+Sons enviados por você aparecem no topo, depois os globais (publicados pelo admin com a chave **Global**), e os embutidos embaixo.
 Sons embutidos para cada preset e upload dos seus (mp3/wav/ogg/m4a) em Configurações → Sons. O som só toca depois que o alerta final é criado, com 2s de intervalo mínimo por preset. O navegador só libera áudio depois do primeiro clique na página.
 
 ## Painéis
@@ -110,6 +112,16 @@ Sons embutidos para cada preset e upload dos seus (mp3/wav/ogg/m4a) em Configura
 3. **Gráfico / Histórico** — gráfico do DexScreener; o Histórico mostra os snapshots observados, os alertas do token e **por que ele alertou ou não** no último ciclo (útil para calibrar presets).
 
 "PEAK" é o maior MCAP que o bot viu, não o ATH absoluto.
+
+## Conexão bloqueada pela operadora
+Algumas operadoras brasileiras bloqueiam o Supabase (login), o PumpPortal e a RPC pública da Solana. O site publicado fala com o login sempre pelo próprio bearhunter.pages.dev (Cloudflare). Para PumpPortal e RPC, em **Configurações → Fontes → Conexão** escolha *Automática* (padrão: tenta direto e, se falhar, vai pelo Cloudflare), *Direta* ou *Via Cloudflare*. Lá também ficam os botões **Reconectar PumpPortal agora** e **Testar Solana RPC**. A RPC pública recusa chamadas vindas do Cloudflare — para o módulo Operadores, use uma RPC grátis da Helius ou QuickNode.
+
+## Ganhos
+Aba para anotar suas operações à mão: par (e CA opcional), entrada e saída em SOL ou USD, data e anotação. Calcula o lucro de cada uma e os totais de hoje, da semana (começa na segunda), do mês e geral. Fica salvo na sua conta.
+
+## Descobrir fazenda
+- **Pelas carteiras que você viu:** cole 2 a 15 carteiras que trabalham nos pares do operador. O bot lê as últimas transações de cada uma e mostra os tokens em comum, quem comprou nos mesmos segundos e quem vendeu junto, com uma sugestão de papel (marcador: entra primeiro com pouco; fazenda: vende junto).
+- **Pelos holders dos tokens:** cole os CAs dos pares lançados ao mesmo tempo. Mostra as carteiras que seguram vários deles e quanto do supply cada uma tem. Dá para mandar as selecionadas direto para o cruzamento de histórico.
 
 ## Versão 2 (planejado)
 Ganhadores, Snipe Desk, Telegram, contas de usuário, coleta sempre ligada num servidor (inclusive o rastreio de operadores).

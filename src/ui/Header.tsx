@@ -40,7 +40,7 @@ function OperatorsLink() {
       className={({ isActive }) => cn('relative flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}
     >
       <Radar size={14} />
-      <span className="hidden sm:inline">Operadores</span>
+      <span className="hidden lg:inline">Operadores</span>
       {unread > 0 && <span className="num absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-down px-1 text-[9px] font-bold text-white">{unread > 99 ? '99+' : unread}</span>}
     </NavLink>
   );
@@ -55,17 +55,18 @@ export function TopNav() {
           <NavLink
             key={n.to}
             to={n.to}
+            title={n.label}
             className={({ isActive }) =>
-              cn('flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')
+              cn('flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')
             }
           >
             <n.icon size={14} />
-            <span className="hidden sm:inline">{n.label}</span>
+            <span className="hidden lg:inline">{n.label}</span>
           </NavLink>
         ))}
         <OperatorsLink />
         {V2.map((n) => (
-          <span key={n.label} title="Fica para a versão 2" className="hidden cursor-not-allowed items-center gap-1.5 px-2 py-1 text-[12px] font-semibold text-dim md:flex">
+          <span key={n.label} title="Fica para a versão 2" className="hidden cursor-not-allowed items-center gap-1.5 whitespace-nowrap px-2 py-1 text-[12px] font-semibold text-dim xl:flex">
             <n.icon size={14} />
             {n.label}
             <span className="rounded bg-raised px-1 text-[9px] text-muted">v2</span>
@@ -73,10 +74,11 @@ export function TopNav() {
         ))}
         <NavLink
           to="/settings"
-          className={({ isActive }) => cn('flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}
+          title="Configurações"
+          className={({ isActive }) => cn('flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}
         >
           <Settings size={14} />
-          <span className="hidden sm:inline">Configurações</span>
+          <span className="hidden lg:inline">Configurações</span>
         </NavLink>
         <AdminLink />
       </nav>
@@ -89,9 +91,9 @@ function AdminLink() {
   const admin = useAuth((s) => s.profile?.is_admin);
   if (!admin) return null;
   return (
-    <NavLink to="/admin" className={({ isActive }) => cn('flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}>
+    <NavLink to="/admin" title="Admin" className={({ isActive }) => cn('flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-semibold text-muted hover:text-fg', isActive && 'bg-primary/15 text-primary')}>
       <Shield size={14} />
-      <span className="hidden sm:inline">Admin</span>
+      <span className="hidden lg:inline">Admin</span>
     </NavLink>
   );
 }
@@ -101,7 +103,7 @@ function UserBox() {
   if (!AUTH_ENABLED) return null;
   return (
     <div className="flex shrink-0 items-center gap-2">
-      <span className="num hidden max-w-[180px] truncate text-[11px] text-dim lg:inline">{email}</span>
+      <span className="num hidden max-w-[180px] truncate text-[11px] text-dim 2xl:inline">{email}</span>
       <button
         className="btn-ghost h-7"
         title="Sair"
@@ -110,7 +112,7 @@ function UserBox() {
           window.location.assign('/'); // limpa a memória da sessão anterior
         }}
       >
-        <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
+        <LogOut size={14} /> <span className="hidden lg:inline">Logout</span>
       </button>
     </div>
   );
@@ -148,7 +150,8 @@ export function SourceRow({ h }: { h: SourceHealth }) {
           </>
         )}
       </div>
-      {(h.lastError || h.detail) && <div className="mt-1.5 text-[10.5px] text-warn/90">{h.detail ?? h.lastError}</div>}
+      {h.detail && <div className="mt-1.5 text-[10.5px] text-warn/90">{h.detail}</div>}
+      {h.lastError && h.state !== 'ok' && <div className="mt-0.5 text-[10.5px] text-down/90">Erro: {h.lastError}</div>}
     </div>
   );
 }

@@ -168,10 +168,11 @@ const drkAlerts = await page.locator('text=/ALERTA INDICADORES DRK/').count();
 await page.goto(`http://localhost:${PORT}/operadores`);
 await page.waitForTimeout(9000);
 const entrada = await page.locator('text=ENTRADA').count();
+await page.getByRole('button', { name: /Pelos holders dos tokens/ }).click();
 await page.locator('textarea').nth(1).fill(`https://gmgn.ai/sol/token/${TOKENS[0].address}\nhttps://gmgn.ai/sol/token/${TOKENS[1].address}`);
-await page.getByRole('button', { name: /Analisar/ }).click();
+await page.getByRole('button', { name: /Analisar holders/ }).click();
 await page.waitForTimeout(3000);
-const farmFound = await page.locator('text=/em 2 token/').count();
+const farmFound = await page.locator('text=/em 2 par/').count();
 await page.getByRole('button', { name: /^É ele$/ }).first().click();
 await page.waitForTimeout(400);
 await page.getByRole('button', { name: /Gerar relatório/ }).click();
@@ -189,8 +190,37 @@ const overflow = await mp.evaluate(() => document.documentElement.scrollWidth > 
 await mp.goto(`http://localhost:${PORT}/settings?tab=fontes`);
 await mp.waitForTimeout(1500);
 await mp.screenshot({ path: `${OUT}/07-mobile-settings.png` });
+await mp.goto(`http://localhost:${PORT}/ganhos`);
+await mp.waitForTimeout(800);
+await mp.locator('input[placeholder="Par (ex.: PIG)"]').fill('PIG');
+await mp.locator('input[placeholder^="Entrada"]').fill('0,5');
+await mp.locator('input[placeholder^="Saída"]').fill('1.25');
+await mp.getByRole('button', { name: 'Registrar' }).click();
+await mp.waitForTimeout(400);
+const journalOk = (await mp.locator('text=/\\+0,75 SOL/').count()) > 0;
+await mp.screenshot({ path: `${OUT}/09-mobile-ganhos.png`, fullPage: true });
+const overflowGanhos = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
 
-console.log(JSON.stringify({ alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+const sizes = [
+  [1024, 768],
+  [820, 1180],
+  [1280, 720],
+];
+const overflowAt = {};
+for (const [w, h] of sizes) {
+  const c = await browser.newContext({ viewport: { width: w, height: h } });
+  const pg = await c.newPage();
+  await setup(pg);
+  for (const route of ['dashboard', 'operadores', 'ganhos', 'admin']) {
+    await pg.goto(`http://localhost:${PORT}/${route}`);
+    await pg.waitForTimeout(route === 'dashboard' ? 4000 : 1000);
+    await pg.screenshot({ path: `${OUT}/10-${w}x${h}-${route}.png` });
+    overflowAt[`${w}-${route}`] = await pg.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  }
+  await c.close();
+}
+
+console.log(JSON.stringify({ journalOk, overflowGanhos, overflowAt, alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);
