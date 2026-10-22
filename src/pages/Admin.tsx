@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, Radar, RefreshCw, Search, ShieldX, Users } from 'lucide-react';
+import { CheckCircle2, Clock, Radar, RefreshCw, Search, ShieldX, Trash2, Users } from 'lucide-react';
 import { supabase, type Profile } from '@/services/supabase';
 import { useAuth } from '@/state/auth';
 import { Switch, toast } from '@/ui/primitives';
@@ -12,6 +12,15 @@ const statusCls: Record<Profile['status'], string> = {
   blocked: 'border-down/50 bg-down/10 text-down',
 };
 const statusLabel: Record<Profile['status'], string> = { pending: 'pendente', active: 'ativo', blocked: 'bloqueado' };
+
+function lastSeen(iso: string) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d.getTime()) / 60_000);
+  if (mins < 2) return 'agora';
+  if (mins < 60) return `há ${mins} min`;
+  if (mins < 24 * 60) return `há ${Math.round(mins / 60)} h`;
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 
 export default function Admin() {
   const me = useAuth((s) => s.profile);
@@ -36,6 +45,19 @@ export default function Admin() {
     if (error) return toast(`Erro: ${error.message}`);
     toast(ok);
     setRows((r) => (r ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  };
+
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const remove = async (r: Profile) => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc('admin_delete_user', { target: r.id });
+    setConfirmDel(null);
+    if (error) {
+      if (/function .*admin_delete_user|Could not find the function/i.test(error.message)) return toast('Falta rodar o SQL 002_admin.sql no Supabase para liberar a exclusão.');
+      return toast(`Erro: ${error.message}`);
+    }
+    toast(`${r.email ?? 'Usuário'} excluído`);
+    setRows((rs) => (rs ?? []).filter((x) => x.id !== r.id));
   };
 
   const list = useMemo(() => {
@@ -96,7 +118,12 @@ export default function Admin() {
                   <div className="num text-[11px] text-muted">{r.email}</div>
                 </div>
                 <span className={cn('chip', statusCls[r.status])}>{statusLabel[r.status]}</span>
-                <span className="num text-[10.5px] text-dim">{new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
+                <span className="num text-[10.5px] text-dim" title="Data do cadastro">
+                  cadastro {new Date(r.created_at).toLocaleDateString('pt-BR')}
+                </span>
+                <span className="num text-[10.5px] text-dim" title="Último acesso ao BearHunter">
+                  acesso {r.last_seen_at ? lastSeen(r.last_seen_at) : '—'}
+                </span>
                 <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Libera a aba Operadores para este usuário">
                   <Radar size={12} /> Operadores
                   <Switch checked={r.operators_enabled} onChange={(v) => void update(r.id, { operators_enabled: v }, v ? 'Operadores liberado' : 'Operadores removido')} />
@@ -112,12 +139,27 @@ export default function Admin() {
                       Bloquear
                     </button>
                   )}
+                  {!self &&
+                    (confirmDel === r.id ? (
+                      <>
+                        <button className="btn h-7 border-down bg-down/20 text-down" onClick={() => void remove(r)}>
+                          Confirmar exclusão
+                        </button>
+                        <button className="btn h-7" onClick={() => setConfirmDel(null)}>
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button className="btn h-7 hover:border-down/50 hover:text-down" title="Excluir a conta, o perfil e as configurações deste usuário" onClick={() => setConfirmDel(r.id)}>
+                        <Trash2 size={12} /> Excluir
+                      </button>
+                    ))}
                 </div>
               </div>
             );
           })}
         </div>
-        <p className="text-[11px] text-dim">Cada usuário tem os próprios presets, Watchlist e carteiras, salvos na conta dele. A aba Operadores só aparece para quem você liberar.</p>
+        <p className="text-[11px] text-dim">Cada usuário tem os próprios presets, Watchlist e carteiras, salvos na conta dele. A aba Operadores só aparece para quem você liberar. Excluir apaga a conta de login, o perfil e as configurações da pessoa (não dá para desfazer; ela pode se cadastrar de novo e cai em pendente).</p>
       </div>
     </div>
   );

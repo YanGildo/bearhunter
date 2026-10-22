@@ -2,6 +2,7 @@
 // para abrirem iguais em qualquer aparelho. Alertas, snapshots e sons continuam no navegador.
 // A API key do PumpPortal NUNCA vai para a nuvem.
 import { supabase } from './supabase';
+import { touchLastSeen } from '@/state/auth';
 import { useStore } from '@/state/store';
 import { defaultIndicator, defaultPresets } from '@/domain/presets';
 import { EMPTY_OPERATOR_STATE } from '@/operators/types';
@@ -36,6 +37,7 @@ function snapshot() {
 
 async function push() {
   if (!supabase || !userId) return;
+  touchLastSeen();
   await supabase.from('user_state').upsert({ user_id: userId, data: snapshot(), updated_at: new Date().toISOString() });
 }
 

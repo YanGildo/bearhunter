@@ -31,15 +31,15 @@ function openChart(mint: string) {
   useUi.getState().set({ chartModal: { token: mint, pair: t?.lastObservation?.pairAddress ?? null, symbol: t?.meta.symbol ?? null, name: t?.meta.name ?? null, imageUrl: t?.meta.imageUrl ?? null } });
 }
 
-function Card({ title, icon: Icon, children, right }: { title: string; icon: typeof Wallet; children: React.ReactNode; right?: React.ReactNode }) {
+function Card({ title, icon: Icon, children, right, fixed }: { title: string; icon: typeof Wallet; children: React.ReactNode; right?: React.ReactNode; fixed?: boolean }) {
   return (
-    <section className="flex min-h-0 flex-col rounded-lg border border-line bg-panel">
+    <section className={cn('flex min-h-0 flex-col rounded-lg border border-line bg-panel', fixed && 'h-[65vh] min-h-[360px] lg:h-full')}>
       <div className="flex min-h-10 items-center gap-2 border-b border-line px-3 py-1.5">
         <Icon size={14} className="text-primary" />
         <h2 className="text-[12px] font-bold uppercase tracking-[0.12em]">{title}</h2>
         <div className="ml-auto flex items-center gap-1.5">{right}</div>
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </section>
   );
 }
@@ -100,7 +100,7 @@ function Wallets() {
   };
   const list = wallets.filter((w) => filter === 'all' || w.role === filter);
   return (
-    <Card title={`Carteiras (${wallets.length}/${MAX_OPERATOR_WALLETS})`} icon={Wallet}>
+    <Card fixed title={`Carteiras (${wallets.length}/${MAX_OPERATOR_WALLETS})`} icon={Wallet}>
       <div className="space-y-2 border-b border-line p-3">
         <textarea
           className="input num h-auto py-2 text-[11px]"
@@ -131,7 +131,7 @@ function Wallets() {
           </button>
         ))}
       </div>
-      <div className="max-h-[52vh] overflow-y-auto lg:max-h-none">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {!list.length && <div className="p-4 text-center text-[11px] text-dim">Nenhuma carteira. Adicione a 8c3ss como Marcador para começar.</div>}
         {list.map((w) => (
           <div key={w.address} className={cn('border-b border-line px-3 py-2', !w.active && 'opacity-50')}>
@@ -250,6 +250,7 @@ function Signals() {
   ];
   return (
     <Card
+      fixed
       title={`Sinais (${signals.length})`}
       icon={Radar}
       right={
@@ -267,7 +268,7 @@ function Signals() {
           </button>
         ))}
       </div>
-      <div className="max-h-[70vh] overflow-y-auto lg:max-h-none">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {!list.length && (
           <div className="p-6 text-center text-[12px] text-dim">
             Nenhum sinal ainda. Com carteiras cadastradas, as compras e vendas delas aparecem aqui. Migrações rápidas e bundles aparecem como <b className="text-fg">Candidatos</b>.
@@ -291,8 +292,8 @@ function OpTokens() {
   const now = useNow(10_000);
   const list = useMemo(() => Object.values(tokens).sort((a, b) => b.lastSignalAt - a.lastSignalAt).slice(0, 60), [tokens]);
   return (
-    <Card title={`Tokens do operador (${Object.keys(tokens).length})`} icon={Zap}>
-      <div className="max-h-[70vh] overflow-y-auto lg:max-h-none">
+    <Card fixed title={`Tokens do operador (${Object.keys(tokens).length})`} icon={Zap}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {!list.length && <div className="p-6 text-center text-[12px] text-dim">Os tokens ligados ao operador aparecem aqui, com quantas carteiras da fazenda estão dentro.</div>}
         {list.map((t) => {
           const o = market[t.mint]?.lastObservation;
@@ -736,7 +737,8 @@ export default function Operators() {
             <p className="text-[11.5px] text-muted">Rastreio das carteiras do operador e sinais do padrão dele. Separado dos alertas de volume — a decisão de entrar e sair é sua.</p>
           </div>
         </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(300px,0.9fr)_minmax(340px,1.2fr)_minmax(320px,1fr)]">
+        {/* altura fixa: cada quadro rola por dentro; rolando fora deles você chega em Confirmados e Descobrir */}
+        <div className="grid gap-3 md:grid-cols-2 lg:h-[max(460px,calc(100dvh-200px))] lg:grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.2fr)_minmax(300px,1fr)]">
           <Wallets />
           <Signals />
           <OpTokens />

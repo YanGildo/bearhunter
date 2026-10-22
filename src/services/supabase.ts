@@ -45,4 +45,5 @@ export interface Profile {
   is_admin: boolean;
   operators_enabled: boolean;
   created_at: string;
+  last_seen_at?: string | null;
 }

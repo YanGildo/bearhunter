@@ -27,6 +27,17 @@ const msg = (e: unknown) => {
 };
 
 let started = false;
+let lastTouch = 0;
+
+/** Marca o "último acesso" no Admin (no máximo a cada 5 min). */
+export function touchLastSeen() {
+  if (!supabase || Date.now() - lastTouch < 5 * 60_000) return;
+  lastTouch = Date.now();
+  void supabase.rpc('touch_last_seen').then(
+    () => undefined,
+    () => undefined,
+  );
+}
 let listening = false;
 
 /** Não deixa uma chamada ao Supabase prender a tela de carregamento para sempre. */
@@ -77,6 +88,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
       if (error) return set({ status: 'error', error: msg(error) });
       if (data) {
         const p = data as Profile;
+        if (p.status === 'active') touchLastSeen();
         return set({ profile: p, status: p.status === 'active' ? 'active' : p.status === 'blocked' ? 'blocked' : 'pending', error: null });
       }
       await new Promise((r) => setTimeout(r, 800));
