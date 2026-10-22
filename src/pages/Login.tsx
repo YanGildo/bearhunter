@@ -81,6 +81,10 @@ export function LoginPage() {
         <GoogleIcon /> Continuar com Google
       </button>
       <p className="mt-4 text-center text-[11px] text-dim">Novas contas precisam ser aprovadas pelo administrador antes do primeiro acesso.</p>
+      <p className="mt-2 text-center text-[11px] text-dim">
+        <a className="underline hover:text-fg" href="/privacidade.html">Privacidade</a> ·{' '}
+        <a className="underline hover:text-fg" href="/termos.html">Termos de uso</a>
+      </p>
     </Shell>
   );
 }
