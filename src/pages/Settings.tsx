@@ -6,6 +6,8 @@ import { store as db } from '@/storage/db';
 import { allSounds, forgetSoundUrl, playSound, unlockAudio, type SoundOption } from '@/services/sound';
 import { collector } from '@/collector/collector';
 import { operatorTracker } from '@/operators/tracker';
+import { useAuth } from '@/state/auth';
+import { setSoundGlobal } from '@/services/globalSounds';
 import { DEXSCREENER_DEFAULT_BASE } from '@/adapters/dexscreener/client';
 import { SourceRow } from '@/ui/Header';
 import { Switch, toast } from '@/ui/primitives';
@@ -37,6 +39,7 @@ function MuteScam() {
 }
 
 function Sounds() {
+  const isAdmin = useAuth((a) => !!a.profile?.is_admin);
   const [list, setList] = useState<SoundOption[]>([]);
   const [queue, setQueue] = useState<{ name: string; status: string }[]>([]);
   const ref = useRef<HTMLInputElement>(null);
@@ -56,7 +59,7 @@ function Sounds() {
   };
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-muted">Os sons ficam salvos neste navegador. Escolha qual toca em cada preset no modal de configuração do preset.</p>
+      <p className="text-[12px] text-muted">Os sons que você envia ficam salvos neste navegador e aparecem no topo; os embutidos ficam embaixo. Sons marcados como <b>global</b> foram publicados pelo administrador e estão disponíveis para todos. Escolha qual toca em cada preset no modal de configuração do preset.</p>
       <MuteScam />
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn h-9" onClick={() => ref.current?.click()}>
@@ -79,6 +82,23 @@ function Sounds() {
           <div key={s.id} className="flex items-center gap-2 px-3 py-2">
             <span className="flex-1 text-[12px]">{s.name}</span>
             {s.builtin && <span className="chip border-line text-dim">embutido</span>}
+            {s.global && <span className="chip border-primary/50 text-primary">global</span>}
+            {!s.builtin && !s.global && isAdmin && (
+              <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Disponibiliza este som para todos os usuários">
+                Global
+                <Switch
+                  checked={!!s.publishedGlobal}
+                  onChange={async (on) => {
+                    const rec = await db.getSound(s.id);
+                    if (!rec) return;
+                    toast(on ? 'Publicando som…' : 'Removendo dos globais…');
+                    const err = await setSoundGlobal(s.id, s.name, rec.blob, on);
+                    toast(err ? `Erro: ${err}` : on ? 'Som disponível para todos os usuários' : 'Som não é mais global');
+                    reload();
+                  }}
+                />
+              </label>
+            )}
             <button
               className="btn-ghost"
               onClick={() => {

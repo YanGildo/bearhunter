@@ -1,11 +1,16 @@
 // Sons de alerta. Embutidos (sintetizados, sem arquivo) + arquivos que o usuário envia,
 // guardados no IndexedDB do navegador.
 import { store } from '@/storage/db';
+import { globalIdFor, globalSoundUrl, listGlobalSounds } from './globalSounds';
 
 export interface SoundOption {
   id: string;
   name: string;
   builtin: boolean;
+  /** som global publicado pelo admin ("g:<id>") */
+  global?: boolean;
+  /** som enviado por este usuário que ele publicou como global */
+  publishedGlobal?: boolean;
 }
 
 type Note = [freq: number, startS: number, durS: number, type?: OscillatorType];
@@ -77,6 +82,11 @@ export async function playSound(id: string | null, volume = 0.7) {
   const b = BUILTINS[id];
   if (b) return playSynth(b.notes, volume);
   let url = urlCache.get(id);
+  if (!url && id.startsWith('g:')) {
+    await listGlobalSounds();
+    url = globalSoundUrl(id.slice(2)) ?? undefined;
+    if (!url) return;
+  }
   if (!url) {
     const rec = await store.getSound(id);
     if (!rec) return;
@@ -92,9 +102,15 @@ export function builtinSounds(): SoundOption[] {
   return Object.entries(BUILTINS).map(([id, v]) => ({ id, name: v.name, builtin: true }));
 }
 
+/** Ordem: enviados por você (mais novos primeiro) → globais do admin → embutidos. */
 export async function allSounds(): Promise<SoundOption[]> {
-  const custom = await store.listSounds();
-  return [...builtinSounds(), ...custom.map((s) => ({ id: s.id, name: s.name, builtin: false }))];
+  const [custom, globals] = await Promise.all([store.listSounds(), listGlobalSounds().catch(() => [])]);
+  const mine = new Set(custom.map((c) => globalIdFor(c.id)));
+  const own = [...custom]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((s) => ({ id: s.id, name: s.name, builtin: false, publishedGlobal: globals.some((g) => g.id === globalIdFor(s.id) && g.active) }));
+  const shared = globals.filter((g) => g.active && !mine.has(g.id)).map((g) => ({ id: `g:${g.id}`, name: g.name, builtin: false, global: true }));
+  return [...own, ...shared, ...builtinSounds()];
 }
 
 export function forgetSoundUrl(id: string) {
