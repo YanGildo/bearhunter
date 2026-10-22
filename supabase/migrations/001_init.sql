@@ -80,3 +80,10 @@ drop policy if exists "user_state_own" on public.user_state;
 create policy "user_state_own" on public.user_state for all
   using (user_id = auth.uid() and public.is_active())
   with check (user_id = auth.uid() and public.is_active());
+
+-- 4) Funções internas não ficam expostas para visitantes sem login
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.is_admin() from public, anon;
+revoke execute on function public.is_active() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_active() to authenticated;
