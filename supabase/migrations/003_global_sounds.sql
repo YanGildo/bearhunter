@@ -19,3 +19,4 @@ values ('sounds', 'sounds', true, 5242880, array['audio/mpeg','audio/mp3','audio
 on conflict (id) do nothing;
 -- create policy "sounds_admin_upload" on storage.objects for insert to authenticated with check (bucket_id = 'sounds' and public.is_admin());
 -- create policy "sounds_admin_change" on storage.objects for update to authenticated using (bucket_id = 'sounds' and public.is_admin()) with check (bucket_id = 'sounds' and public.is_admin());
+-- create policy "sounds_admin_read" on storage.objects for select to authenticated using (bucket_id = 'sounds' and public.is_admin());  -- o upload com upsert exige leitura
