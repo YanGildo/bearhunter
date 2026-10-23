@@ -175,6 +175,10 @@ await page.waitForTimeout(3000);
 const farmFound = await page.locator('text=/em 2 par/').count();
 await page.getByRole('button', { name: /^É ele$/ }).first().click();
 await page.waitForTimeout(400);
+await page.getByRole('button', { name: /^É ele\s*1$/ }).click();
+await page.waitForTimeout(300);
+const yesTab = await page.locator('text=/é ele|confirmado/i').count();
+await page.screenshot({ path: `${OUT}/08b-operadores-e-ele.png` });
 await page.getByRole('button', { name: /Gerar relatório/ }).click();
 await page.waitForTimeout(2500);
 const reportOk = (await page.locator('textarea[readonly]').inputValue().catch(() => '')).includes('Relatório do operador');
@@ -220,7 +224,7 @@ for (const [w, h] of sizes) {
   await c.close();
 }
 
-console.log(JSON.stringify({ journalOk, overflowGanhos, overflowAt, alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ yesTab, journalOk, overflowGanhos, overflowAt, alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);

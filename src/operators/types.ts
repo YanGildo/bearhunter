@@ -87,6 +87,8 @@ export interface OperatorSettings {
   botsOffRatio: number;
   soundId: string | null;
   dumpSoundId: string | null;
+  /** som por tipo de sinal; ausente = usa o som padrão (soundId / dumpSoundId); null = sem som */
+  kindSounds: Partial<Record<SignalKind, string | null>>;
   volume: number;
   notify: boolean;
   detectFastMigration: boolean;
@@ -121,6 +123,7 @@ export const DEFAULT_OPERATOR_SETTINGS: OperatorSettings = {
   botsOffRatio: 0.3,
   soundId: 'builtin:operator',
   dumpSoundId: 'builtin:operator-dump',
+  kindSounds: {},
   volume: 0.8,
   notify: true,
   detectFastMigration: true,

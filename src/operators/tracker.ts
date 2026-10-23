@@ -16,7 +16,7 @@ import { operatorHooks } from './hooks';
 import { actionFromLogs, parseWalletTx, type WalletMove } from './parseTx';
 import { crossWallets, type CrossResult } from './crossWallets';
 import type { AccountTrade } from '@/adapters/pumpportal/stream';
-import { CANDIDATE_KINDS, ROLE_META, type OperatorSignal, type OperatorToken, type OperatorWallet, type SignalKind, type WalletRole } from './types';
+import { CANDIDATE_KINDS, ROLE_META, type OperatorSettings, type OperatorSignal, type OperatorToken, type OperatorWallet, type SignalKind, type WalletRole } from './types';
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const FARM_MILESTONES = [1, 3, 5, 10, 15];
@@ -479,8 +479,11 @@ class OperatorTracker {
     const s = st.operator.settings;
     const candidate = CANDIDATE_KINDS.includes(sig.kind);
     if (sig.mint && st.prefs.muteScamSound && st.scams[sig.mint]) return;
-    if (!st.prefs.soundMuted && (!candidate || s.soundOnCandidates)) {
-      void playSound(sig.kind === 'despejo' ? s.dumpSoundId : s.soundId, s.volume);
+    const sound = signalSound(s, sig.kind);
+    // som escolhido especificamente para o tipo toca mesmo para candidatos
+    const specific = s.kindSounds?.[sig.kind] != null;
+    if (!st.prefs.soundMuted && sound && (!candidate || s.soundOnCandidates || specific)) {
+      void playSound(sound, s.volume);
     }
     if (s.notify && (!candidate || s.soundOnCandidates) && st.prefs.notifEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
@@ -640,3 +643,10 @@ class OperatorTracker {
 }
 
 export const operatorTracker = new OperatorTracker();
+
+/** Som de um tipo de sinal: o escolhido para o tipo, senão o padrão (despejo tem o seu). */
+export function signalSound(s: OperatorSettings, kind: SignalKind): string | null {
+  const k = s.kindSounds?.[kind];
+  if (k !== undefined) return k;
+  return kind === 'despejo' ? s.dumpSoundId : s.soundId;
+}

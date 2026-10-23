@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, LineChart, Plus, Search, Skull, Trash2, Wallet, Radar, Settings2, Users, Zap, Check, X, FileText, Undo2, BadgeCheck } from 'lucide-react';
+import { Copy, ExternalLink, LineChart, Plus, Search, Skull, Trash2, Wallet, Radar, Settings2, Users, Zap, Check, X, FileText, Undo2, BadgeCheck, Play } from 'lucide-react';
 import { useStore } from '@/state/store';
 import { useUi } from '@/state/ui';
-import { operatorTracker, type HolderRow } from '@/operators/tracker';
+import { operatorTracker, signalSound, type HolderRow } from '@/operators/tracker';
 import type { CrossResult } from '@/operators/crossWallets';
 import { extractAddresses } from '@/operators/detectors';
-import { CANDIDATE_KINDS, MAX_OPERATOR_WALLETS, ROLE_META, SIGNAL_META, type OperatorSignal, type SignalKind, type WalletRole } from '@/operators/types';
+import { CANDIDATE_KINDS, MAX_OPERATOR_WALLETS, ROLE_META, SIGNAL_META, type OperatorSignal, type OperatorToken, type SignalKind, type WalletRole } from '@/operators/types';
 import { fmtAge, fmtTime, fmtUsd, shortAddr } from '@/domain/num';
 import { axiomUrl, copyText, dexUrl, gmgnUrl } from '@/lib/links';
 import { cn } from '@/lib/cn';
 import { Switch, toast, useNow } from '@/ui/primitives';
 import { SourceRow } from '@/ui/Header';
 import { ScamBadge, toggleScamWithToast } from '@/ui/ScamMark';
-import { builtinSounds } from '@/services/sound';
+import { allSounds, builtinSounds, playSound, unlockAudio, type SoundOption } from '@/services/sound';
 
 const ROLES: WalletRole[] = ['marcador', 'auxiliar', 'fazenda'];
 const roleTone: Record<WalletRole, string> = {
@@ -285,89 +285,173 @@ function Signals() {
 
 // ---------- tokens ----------
 
-function OpTokens() {
-  const tokens = useStore((s) => s.operator.tokens);
+type TokTab = 'pending' | 'yes' | 'no';
+
+function OpTokenRow({ t }: { t: OperatorToken }) {
   const market = useStore((s) => s.tokens);
   const scams = useStore((s) => s.scams);
   const confirmed = useStore((s) => s.operator.confirmed);
   const now = useNow(10_000);
-  const list = useMemo(() => Object.values(tokens).sort((a, b) => b.lastSignalAt - a.lastSignalAt).slice(0, 60), [tokens]);
+  const o = market[t.mint]?.lastObservation;
+  const w5 = o?.windows['5m'];
+  const tx = w5?.buys != null && w5?.sells != null ? w5.buys + w5.sells : null;
+  const pos = Object.entries(t.wallets);
+  const farm = pos.filter(([, p]) => p.role === 'fazenda' && p.buys > 0);
+  const farmIn = farm.filter(([, p]) => p.sells === 0).length;
+  const markers = pos.filter(([, p]) => p.role !== 'fazenda' && p.buys > 0).length;
+  const born = t.createdAt ?? o?.pairCreatedAt ?? t.firstSeenAt;
   return (
-    <Card fixed title={`Tokens do operador (${Object.keys(tokens).length})`} icon={Zap}>
+    <div
+      key={t.mint}
+      className="cursor-pointer border-b border-line px-3 py-2.5 hover:bg-card"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('a,button')) return;
+        openChart(t.mint);
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[13px] font-bold">{market[t.mint]?.meta.symbol ?? t.symbol ?? shortAddr(t.mint)}</span>
+        <span className={cn('chip', toneCls[SIGNAL_META[t.reason].tone])}>{SIGNAL_META[t.reason].label}</span>
+        {t.botsState && <span className={cn('chip', t.botsState === 'on' ? 'border-up/50 text-up' : 'border-warn/50 text-warn')}>bots {t.botsState}</span>}
+        {scams[t.mint] && <ScamBadge />}
+        {confirmed[t.mint] && (
+          <span className="chip border-up/60 bg-up/15 text-up">
+            <BadgeCheck size={10} /> confirmado
+          </span>
+        )}
+        <span className="num ml-auto text-[10.5px] text-dim">{fmtAge(born, now)}</span>
+      </div>
+      <div className="mt-1.5 grid grid-cols-4 gap-2">
+        <div>
+          <div className="label">MCAP</div>
+          <div className="num text-[12px] font-semibold">{fmtUsd(o?.marketCapUsd)}</div>
+        </div>
+        <div>
+          <div className="label">5M VOL</div>
+          <div className="num text-[12px] font-semibold text-warn">{fmtUsd(w5?.volumeUsd)}</div>
+        </div>
+        <div>
+          <div className="label">TXNS 5M</div>
+          <div className="num text-[12px]">{tx ?? '—'}</div>
+        </div>
+        <div>
+          <div className="label">PEAK</div>
+          <div className="num text-[12px] text-muted">{fmtUsd(market[t.mint]?.observedPeakMcap)}</div>
+        </div>
+      </div>
+      <div className="num mt-1.5 flex flex-wrap items-center gap-x-3 text-[10.5px] text-dim">
+        <span className={farm.length ? 'text-revival' : ''}>
+          Fazenda: {farmIn} dentro{farm.length - farmIn ? ` · ${farm.length - farmIn} vendeu` : ''}
+        </span>
+        <span>Marcadores/aux: {markers}</span>
+        {t.migratedAt && t.createdAt && <span>migrou em {Math.round((t.migratedAt - t.createdAt) / 1000)}s</span>}
+        <span className="ml-auto flex gap-2">
+          <a className="hover:text-fg" href={gmgnUrl(t.mint)} target="_blank" rel="noreferrer">
+            GMGN
+          </a>
+          <a className="hover:text-fg" href={axiomUrl(t.mint, o?.pairAddress)} target="_blank" rel="noreferrer">
+            Axiom
+          </a>
+          <button className={cn('hover:text-down', scams[t.mint] && 'text-down')} title="Marcar scam" onClick={() => toggleScamWithToast(t.mint, t.symbol)}>
+            <Skull size={11} />
+          </button>
+        </span>
+      </div>
+      <div className="mt-1.5">
+        <Verdict mint={t.mint} />
+      </div>
+    </div>
+  );
+}
+
+function OpTokens() {
+  const tokens = useStore((s) => s.operator.tokens);
+  const confirmed = useStore((s) => s.operator.confirmed);
+  const discarded = useStore((s) => s.operator.discarded);
+  const market = useStore((s) => s.tokens);
+  // abre em "É ele"; se ainda não confirmou nenhum, abre em "A definir"
+  const [tab, setTab] = useState<TokTab>(() => (Object.keys(useStore.getState().operator.confirmed).length ? 'yes' : 'pending'));
+  const pending = useMemo(
+    () => Object.values(tokens).filter((t) => !confirmed[t.mint] && !discarded[t.mint]).sort((a, b) => b.lastSignalAt - a.lastSignalAt).slice(0, 80),
+    [tokens, confirmed, discarded],
+  );
+  const yes = useMemo(() => Object.entries(confirmed).sort((a, b) => b[1].at - a[1].at), [confirmed]);
+  const no = useMemo(() => Object.entries(discarded).sort((a, b) => b[1] - a[1]), [discarded]);
+  const sym = (mint: string) => market[mint]?.meta.symbol ?? tokens[mint]?.symbol ?? confirmed[mint]?.symbol ?? shortAddr(mint, 5);
+  const tabs: { k: TokTab; l: string; n: number }[] = [
+    { k: 'yes', l: 'É ele', n: yes.length },
+    { k: 'pending', l: 'A definir', n: Object.values(tokens).filter((t) => !confirmed[t.mint] && !discarded[t.mint]).length },
+    { k: 'no', l: 'Não é ele', n: no.length },
+  ];
+  return (
+    <Card fixed title="Tokens do operador" icon={Zap}>
+      <div className="flex flex-wrap gap-1 border-b border-line px-3 py-1.5">
+        {tabs.map((x) => (
+          <button key={x.k} className={cn('tab h-6', tab === x.k && 'tab-active', x.k === 'yes' && tab === x.k && 'bg-up/15 text-up', x.k === 'no' && tab === x.k && 'bg-down/15 text-down')} onClick={() => setTab(x.k)}>
+            {x.l} <span className="num ml-1 text-[10px] opacity-70">{x.n}</span>
+          </button>
+        ))}
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {!list.length && <div className="p-6 text-center text-[12px] text-dim">Os tokens ligados ao operador aparecem aqui, com quantas carteiras da fazenda estão dentro.</div>}
-        {list.map((t) => {
-          const o = market[t.mint]?.lastObservation;
-          const w5 = o?.windows['5m'];
-          const tx = w5?.buys != null && w5?.sells != null ? w5.buys + w5.sells : null;
-          const pos = Object.entries(t.wallets);
-          const farm = pos.filter(([, p]) => p.role === 'fazenda' && p.buys > 0);
-          const farmIn = farm.filter(([, p]) => p.sells === 0).length;
-          const markers = pos.filter(([, p]) => p.role !== 'fazenda' && p.buys > 0).length;
-          const born = t.createdAt ?? o?.pairCreatedAt ?? t.firstSeenAt;
-          return (
-            <div
-              key={t.mint}
-              className="cursor-pointer border-b border-line px-3 py-2.5 hover:bg-card"
-              onClick={(e) => {
-                if ((e.target as HTMLElement).closest('a,button')) return;
-                openChart(t.mint);
-              }}
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[13px] font-bold">{market[t.mint]?.meta.symbol ?? t.symbol ?? shortAddr(t.mint)}</span>
-                <span className={cn('chip', toneCls[SIGNAL_META[t.reason].tone])}>{SIGNAL_META[t.reason].label}</span>
-                {t.botsState && <span className={cn('chip', t.botsState === 'on' ? 'border-up/50 text-up' : 'border-warn/50 text-warn')}>bots {t.botsState}</span>}
-                {scams[t.mint] && <ScamBadge />}
-                {confirmed[t.mint] && (
-                  <span className="chip border-up/60 bg-up/15 text-up">
-                    <BadgeCheck size={10} /> confirmado
-                  </span>
-                )}
-                <span className="num ml-auto text-[10.5px] text-dim">{fmtAge(born, now)}</span>
+        {tab === 'pending' && (
+          <>
+            {!pending.length && (
+              <div className="p-6 text-center text-[12px] text-dim">
+                Os tokens que aparecem nos sinais ficam aqui até você decidir: <b className="text-up">É ele</b> manda para a aba "É ele"; <b className="text-down">Não é ele</b> descarta (dá para desfazer na aba "Não é ele").
               </div>
-              <div className="mt-1.5 grid grid-cols-4 gap-2">
-                <div>
-                  <div className="label">MCAP</div>
-                  <div className="num text-[12px] font-semibold">{fmtUsd(o?.marketCapUsd)}</div>
-                </div>
-                <div>
-                  <div className="label">5M VOL</div>
-                  <div className="num text-[12px] font-semibold text-warn">{fmtUsd(w5?.volumeUsd)}</div>
-                </div>
-                <div>
-                  <div className="label">TXNS 5M</div>
-                  <div className="num text-[12px]">{tx ?? '—'}</div>
-                </div>
-                <div>
-                  <div className="label">PEAK</div>
-                  <div className="num text-[12px] text-muted">{fmtUsd(market[t.mint]?.observedPeakMcap)}</div>
-                </div>
-              </div>
-              <div className="num mt-1.5 flex flex-wrap items-center gap-x-3 text-[10.5px] text-dim">
-                <span className={farm.length ? 'text-revival' : ''}>
-                  Fazenda: {farmIn} dentro{farm.length - farmIn ? ` · ${farm.length - farmIn} vendeu` : ''}
-                </span>
-                <span>Marcadores/aux: {markers}</span>
-                {t.migratedAt && t.createdAt && <span>migrou em {Math.round((t.migratedAt - t.createdAt) / 1000)}s</span>}
-                <span className="ml-auto flex gap-2">
-                  <a className="hover:text-fg" href={gmgnUrl(t.mint)} target="_blank" rel="noreferrer">
-                    GMGN
-                  </a>
-                  <a className="hover:text-fg" href={axiomUrl(t.mint, o?.pairAddress)} target="_blank" rel="noreferrer">
-                    Axiom
-                  </a>
-                  <button className={cn('hover:text-down', scams[t.mint] && 'text-down')} title="Marcar scam" onClick={() => toggleScamWithToast(t.mint, t.symbol)}>
-                    <Skull size={11} />
+            )}
+            {pending.map((t) => (
+              <OpTokenRow key={t.mint} t={t} />
+            ))}
+          </>
+        )}
+        {tab === 'yes' && (
+          <>
+            {!yes.length && <div className="p-6 text-center text-[12px] text-dim">Nenhum token confirmado ainda. Use "É ele" na aba A definir, ou adicione em Confirmados do operador.</div>}
+            {yes.map(([mint, c]) =>
+              tokens[mint] ? (
+                <OpTokenRow key={mint} t={tokens[mint]} />
+              ) : (
+                <div key={mint} className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-[12px]">
+                  <button className="font-bold hover:text-primary" onClick={() => openChart(mint)}>
+                    {sym(mint)}
                   </button>
-                </span>
+                  <span className="chip border-up/60 bg-up/15 text-up">
+                    <BadgeCheck size={10} /> é ele
+                  </span>
+                  {c.note && <span className="truncate text-[11px] text-muted">{c.note}</span>}
+                  <span className="num ml-auto text-[10.5px] text-dim">{new Date(c.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                  <a className="text-dim hover:text-fg" href={gmgnUrl(mint)} target="_blank" rel="noreferrer">
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              ),
+            )}
+          </>
+        )}
+        {tab === 'no' && (
+          <>
+            {!no.length && <div className="p-6 text-center text-[12px] text-dim">Nenhum token descartado. Os que você marcar como "Não é ele" ficam aqui, ocultos dos sinais.</div>}
+            {no.map(([mint, at]) => (
+              <div key={mint} className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-[12px]">
+                <button className="font-semibold text-muted hover:text-primary" onClick={() => openChart(mint)}>
+                  {sym(mint)}
+                </button>
+                <span className="chip border-down/50 text-down">não é ele</span>
+                <span className="num ml-auto text-[10.5px] text-dim">{new Date(at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                <a className="text-dim hover:text-fg" href={gmgnUrl(mint)} target="_blank" rel="noreferrer">
+                  <ExternalLink size={11} />
+                </a>
+                <button className="btn-ghost" title="Voltar para A definir" onClick={() => operatorTracker.undiscard(mint)}>
+                  <Undo2 size={11} /> desfazer
+                </button>
+                <button className="btn-ghost hover:text-up" title="Na verdade é ele" onClick={() => operatorTracker.confirm(mint)}>
+                  <Check size={11} /> é ele
+                </button>
               </div>
-              <div className="mt-1.5">
-                <Verdict mint={t.mint} />
-              </div>
-            </div>
-          );
-        })}
+            ))}
+          </>
+        )}
       </div>
     </Card>
   );
@@ -791,6 +875,98 @@ function DiscoverTokens({ onAnalyzeWallets }: { onAnalyzeWallets: (ws: string[])
 
 // ---------- ajustes ----------
 
+const KIND_ORDER: SignalKind[] = ['entrada', 'fazenda', 'despejo', 'transferencia', 'migracao_rapida', 'bundle', 'bots_off', 'bots_on'];
+
+/** Som padrão + um som por tipo de sinal (os mesmos sons dos alertas: enviados, globais e embutidos). */
+function SignalSounds() {
+  const s = useStore((st) => st.operator.settings);
+  const [sounds, setSounds] = useState<SoundOption[]>(builtinSounds());
+  useEffect(() => {
+    void allSounds().then(setSounds);
+  }, []);
+  const set = (p: Partial<typeof s>) => {
+    const op = useStore.getState().operator;
+    useStore.setState({ operator: { ...op, settings: { ...op.settings, ...p } } });
+  };
+  const setKind = (k: SignalKind, v: string) => {
+    const ks = { ...(s.kindSounds ?? {}) };
+    if (v === '__default') delete ks[k];
+    else ks[k] = v === '' ? null : v;
+    set({ kindSounds: ks });
+  };
+  const options = (
+    <>
+      <option value="">Sem som</option>
+      {sounds.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.global ? '🌐 ' : x.builtin ? '' : '★ '}
+          {x.name}
+        </option>
+      ))}
+    </>
+  );
+  const play = (id: string | null) => {
+    if (!id) return;
+    unlockAudio();
+    void playSound(id, s.volume);
+  };
+  return (
+    <div className="rounded-md border border-line bg-card p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="label">Sons dos sinais</div>
+        <label className="ml-auto flex items-center gap-2 text-[11px] text-muted">
+          Volume
+          <input type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => set({ volume: Number(e.target.value) })} />
+          <span className="num w-8 text-right">{Math.round(s.volume * 100)}%</span>
+        </label>
+      </div>
+      <p className="mt-1 text-[10.5px] text-dim">
+        Escolha um som para cada tipo de sinal (os mesmos sons dos alertas: ★ enviados por você, 🌐 globais e os embutidos). "Padrão" usa o som padrão abaixo. Um som escolhido para um candidato (bundle, migração rápida, bots) toca mesmo com "Som também para candidatos" desligado.
+      </p>
+      <div className="mt-2 grid gap-x-6 gap-y-1.5 md:grid-cols-2">
+        <SoundPick label="Padrão dos sinais" value={s.soundId ?? ''} onChange={(v) => set({ soundId: v || null })} onPlay={() => play(s.soundId)}>
+          {options}
+        </SoundPick>
+        <SoundPick label="Padrão do despejo" value={s.dumpSoundId ?? ''} onChange={(v) => set({ dumpSoundId: v || null })} onPlay={() => play(s.dumpSoundId)}>
+          {options}
+        </SoundPick>
+        {KIND_ORDER.map((k) => {
+          const v = s.kindSounds?.[k];
+          return (
+            <SoundPick
+              key={k}
+              label={SIGNAL_META[k].label}
+              tone={SIGNAL_META[k].tone}
+              value={v === undefined ? '__default' : (v ?? '')}
+              onChange={(nv) => setKind(k, nv)}
+              onPlay={() => play(signalSound(s, k))}
+            >
+              <option value="__default">Padrão</option>
+              {options}
+            </SoundPick>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SoundPick({ label, tone, value, onChange, onPlay, children }: { label: string; tone?: string; value: string; onChange: (v: string) => void; onPlay: () => void; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[12px]">
+      {tone ? <span className={cn('chip', toneCls[tone])}>{label}</span> : <span>{label}</span>}
+      <span className="flex items-center gap-1">
+        <select className="input h-8 w-44 sm:w-52" value={value} onChange={(e) => onChange(e.target.value)}>
+          {children}
+        </select>
+        <button className="btn-ghost h-8" title="Ouvir" onClick={onPlay}>
+          <Play size={12} />
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function Num({ label, value, onChange, unit, help }: { label: string; value: number; onChange: (v: number) => void; unit?: string; help?: string }) {
   return (
     <label className="flex items-center justify-between gap-3 py-1 text-[12px]" title={help}>
@@ -840,7 +1016,6 @@ function Settings() {
     const op = useStore.getState().operator;
     useStore.setState({ operator: { ...op, settings: { ...op.settings, ...p } } });
   };
-  const sounds = builtinSounds();
   const toggle = (label: string, v: boolean, k: keyof typeof s, hint?: string) => (
     <div className="flex items-center justify-between gap-3 py-1.5">
       <div>
@@ -869,29 +1044,8 @@ function Settings() {
           <Num label="Transferência: a partir de" unit="%" value={s.transferMinPctSupply} onChange={(v) => set({ transferMinPctSupply: Math.max(0.1, v) })} help="% do supply movido de/para uma carteira da lista" />
           <Num label="Bots off: txns caem para" unit="%" value={Math.round(s.botsOffRatio * 100)} onChange={(v) => set({ botsOffRatio: Math.min(0.9, Math.max(0.05, v / 100)) })} help="% do pico de transações em 5m dos últimos 30 min" />
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 text-[12px]">
-            Som dos sinais
-            <select className="input h-8 w-48" value={s.soundId ?? ''} onChange={(e) => set({ soundId: e.target.value || null })}>
-              <option value="">Sem som</option>
-              {sounds.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center justify-between gap-2 text-[12px]">
-            Som do despejo
-            <select className="input h-8 w-48" value={s.dumpSoundId ?? ''} onChange={(e) => set({ dumpSoundId: e.target.value || null })}>
-              <option value="">Sem som</option>
-              {sounds.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="space-y-2 md:col-span-2">
+          <SignalSounds />
         </div>
         <div className="space-y-2 md:col-span-2">
           <div className="label">PumpPortal — API key (opcional, canal pago)</div>

@@ -87,6 +87,7 @@ Aba separada para acompanhar um operador específico (quem lança tokens com o m
 O relógio do bot roda num Web Worker, então a coleta, os alertas e os sons continuam com a aba escondida. Se o som não tocar, clique uma vez na página depois de abrir (o navegador exige um clique para liberar áudio).
 
 ## Confirmar ou descartar tokens do operador
+O quadro **Tokens do operador** tem três abas: **É ele** (os que você confirmou), **A definir** (tokens que apareceram nos sinais e esperam sua decisão) e **Não é ele** (descartados, ocultos dos sinais; dá para desfazer ou mudar para "é ele"). Em **Ajustes → Sons dos sinais** dá para escolher um som para cada tipo de sinal, entre os mesmos sons dos alertas.
 Em cada sinal e token da aba Operadores há **É ele** (vai para "Confirmados do operador") e **Não é ele** (oculta tudo daquele token e ignora sinais futuros; dá para desfazer em "Descartados"). Em **Confirmados** você também cola CAs manualmente, escreve notas e clica em **Gerar relatório**, um texto pronto para colar no chat com criação, tempo até migrar, MCAP, volume, perfil pago, pico observado, sinais e carteiras da lista.
 
 ## PumpPortal pago (opcional)
