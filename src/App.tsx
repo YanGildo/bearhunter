@@ -16,6 +16,7 @@ import { collector } from './collector/collector';
 import { unlockAudio } from './services/sound';
 import Admin from './pages/Admin';
 import Journal from './pages/Journal';
+import Analysis from './pages/Analysis';
 import { LoadingPage, LoginPage, PendingPage } from './pages/Login';
 import { operatorsAllowed, useAuth } from './state/auth';
 import { AUTH_ENABLED } from './services/supabase';
@@ -48,6 +49,7 @@ function Shell() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/history" element={<History />} />
         <Route path="/ganhos" element={<Journal />} />
+        <Route path="/analise" element={<Analysis />} />
         <Route path="/operadores" element={operatorsAllowed() ? <Operators /> : <Navigate to="/dashboard" replace />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/settings" element={<Settings />} />

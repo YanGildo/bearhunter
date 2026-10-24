@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, LogOut, Radar, Settings, Shield, Trophy, Volume2, VolumeX, Wifi, WifiOff, NotebookPen } from 'lucide-react';
+import { Activity, Bell, CircleCheck, Clock, Crosshair, LayoutGrid, LogOut, Radar, Settings, Shield, Trophy, Volume2, VolumeX, Wifi, WifiOff, NotebookPen, FileSearch } from 'lucide-react';
 import { operatorsAllowed, useAuth } from '@/state/auth';
 import { AUTH_ENABLED } from '@/services/supabase';
 import { useStore } from '@/state/store';
@@ -23,6 +23,7 @@ export function BrandLogo() {
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { to: '/history', label: 'History', icon: Clock },
+  { to: '/analise', label: 'Análise', icon: FileSearch },
   { to: '/ganhos', label: 'Ganhos', icon: NotebookPen },
 ];
 const V2 = [

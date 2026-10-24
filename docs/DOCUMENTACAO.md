@@ -117,6 +117,11 @@ Sons embutidos para cada preset e upload dos seus (mp3/wav/ogg/m4a) em Configura
 ## Conexão bloqueada pela operadora
 Algumas operadoras brasileiras bloqueiam o Supabase (login), o PumpPortal e a RPC pública da Solana. O site publicado fala com o login sempre pelo próprio bearhunter.pages.dev (Cloudflare). Para PumpPortal e RPC, em **Configurações → Fontes → Conexão** escolha *Automática* (padrão: tenta direto e, se falhar, vai pelo Cloudflare), *Direta* ou *Via Cloudflare*. Lá também ficam os botões **Reconectar PumpPortal agora** e **Testar Solana RPC**. A RPC pública recusa chamadas vindas do Cloudflare — para o módulo Operadores, use uma RPC grátis da Helius ou QuickNode.
 
+## Análise de risco (GMGN → BearHunter)
+1. Na página do token no GMGN, faça à IA deles as perguntas da aba **Análise** (botões copiam o texto): análise do token, distribuição de holders e, se faltar, o fluxo agora.
+2. Numa conversa com outra IA, cole o prompt (botão **Copiar prompt** ou **Baixar .txt**) e depois as respostas do GMGN. Ela devolve um resumo 🟢🟡🔴 e um bloco `### BH-ANALISE v1 … ### FIM` por token.
+3. Cole a resposta na aba **Análise** e clique em **Ler análise**. O BearHunter calcula a nota de risco de 0 a 100 com regras fixas (carteiras de risco, top 10, dev, hold médio, liquidez/MCAP, contrato, rug ratio, fluxo…), mostra o motivo de cada ponto, os alertas e o que vigiar, e compara com o MCAP de agora se o token estiver na Watchlist. Faixas: até 29 baixo, 30–54 médio, 55–74 alto, 75+ evitar. Campo vazio não pontua, só baixa a confiança.
+
 ## Ganhos
 Aba para anotar suas operações à mão: par (e CA opcional), entrada e saída em SOL ou USD, data e anotação. Calcula o lucro de cada uma e os totais de hoje, da semana (começa na segunda), do mês e geral. Fica salvo na sua conta.
 

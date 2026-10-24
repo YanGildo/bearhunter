@@ -1,4 +1,5 @@
 import type { RouteMode } from '@/adapters/route';
+import type { GmgnAnalysis } from '@/analysis/parse';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Alert, IndicatorConfig, IndicatorKey, MyAlert, PresetConfig, PresetKey, Timeframe, TrackedToken } from '@/domain/types';
@@ -103,6 +104,8 @@ interface State {
   savedTokens: TrackedToken[]; // tokens manuais/favoritos/pastas, sem observações
   /** aba Ganhos: registro manual das operações do usuário */
   journal: JournalEntry[];
+  /** aba Análise: blocos BH-ANALISE colados (respostas da IA do GMGN convertidas) */
+  analyses: AnalysisEntry[];
 
   set: (p: Partial<State>) => void;
   setPrefs: (p: Partial<Prefs>) => void;
@@ -140,6 +143,7 @@ export const useStore = create<State>()(
       myAlerts: [],
       savedTokens: [],
       journal: [],
+      analyses: [],
 
       set: (p) => set(p),
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
@@ -181,6 +185,7 @@ export const useStore = create<State>()(
         myAlerts: s.myAlerts,
         savedTokens: s.savedTokens,
         journal: s.journal,
+        analyses: s.analyses,
         selected: s.selected,
       }),
       merge: (persisted, current) => {
@@ -215,6 +220,13 @@ export const useStore = create<State>()(
 );
 
 export const getState = () => useStore.getState();
+
+export interface AnalysisEntry {
+  id: string;
+  /** quando foi colado no BearHunter (ms) */
+  at: number;
+  data: GmgnAnalysis;
+}
 
 export interface JournalEntry {
   id: string;

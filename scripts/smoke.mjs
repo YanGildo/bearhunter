@@ -184,6 +184,16 @@ await page.waitForTimeout(2500);
 const reportOk = (await page.locator('textarea[readonly]').inputValue().catch(() => '')).includes('Relatório do operador');
 await page.screenshot({ path: `${OUT}/08-operadores.png`, fullPage: true });
 
+const promptTxt = (await import('node:fs')).readFileSync(new URL('../docs/PROMPT_IA_ANALISE.txt', import.meta.url), 'utf8');
+const exampleBlock = promptTxt.slice(promptTxt.indexOf('🟡 $BIBI'), promptTxt.lastIndexOf('### FIM') + 7);
+await page.goto(`http://localhost:${PORT}/analise`);
+await page.waitForTimeout(600);
+await page.locator('textarea').first().fill(exampleBlock);
+await page.getByRole('button', { name: /Ler análise/ }).click();
+await page.waitForTimeout(500);
+const analysisOk = (await page.locator('text=RISCO ALTO').count()) > 0 && (await page.locator('text=/^55$/').count()) > 0;
+await page.screenshot({ path: `${OUT}/11-analise.png`, fullPage: true });
+
 const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const mp = await m.newPage();
 await setup(mp);
@@ -215,7 +225,7 @@ for (const [w, h] of sizes) {
   const c = await browser.newContext({ viewport: { width: w, height: h } });
   const pg = await c.newPage();
   await setup(pg);
-  for (const route of ['dashboard', 'operadores', 'ganhos', 'admin']) {
+  for (const route of ['dashboard', 'operadores', 'ganhos', 'analise']) {
     await pg.goto(`http://localhost:${PORT}/${route}`);
     await pg.waitForTimeout(route === 'dashboard' ? 4000 : 1000);
     await pg.screenshot({ path: `${OUT}/10-${w}x${h}-${route}.png` });
@@ -224,7 +234,7 @@ for (const [w, h] of sizes) {
   await c.close();
 }
 
-console.log(JSON.stringify({ yesTab, journalOk, overflowGanhos, overflowAt, alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ analysisOk, yesTab, journalOk, overflowGanhos, overflowAt, alertsText, reportOk, drkAlerts, entrada, farmFound, chartOk, scamBadges, mobileHorizontalOverflow: overflow, errors: errors.filter((e) => !/ERR_FAILED|net::/.test(e)).slice(0, 10) }, null, 2));
 await browser.close();
 server.kill();
 process.exit(0);

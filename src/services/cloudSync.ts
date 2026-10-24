@@ -33,6 +33,7 @@ function snapshot() {
     myAlerts: s.myAlerts,
     savedTokens: s.savedTokens,
     journal: s.journal,
+    analyses: s.analyses.slice(0, 100),
     operator,
   };
 }
@@ -121,6 +122,7 @@ export async function startCloudSync(uid: string) {
       scams: {},
       folders: [],
       journal: [],
+      analyses: [],
       myAlerts: [],
       savedTokens: [],
       operator: EMPTY_OPERATOR_STATE,
